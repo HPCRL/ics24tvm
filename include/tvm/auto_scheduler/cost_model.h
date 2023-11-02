@@ -119,39 +119,6 @@ class RandomModel : public CostModel {
 };
 
 
-class splitMeta {
- public:
-  int step_id;
-  int adjust_stage_id;
-  int problem_size;
-  Iterator origin_itr;
-  std::vector<int> tile_sizes;
-  bool parallel;
-
-  splitMeta(int step_id, int adjust_stage_id, int problem_size, int tile_len) {
-    this->step_id = step_id;
-    this->adjust_stage_id = adjust_stage_id;
-    this->problem_size = problem_size;
-  }
-  ~splitMeta() {
-    // std::cout << "delete class" << std::endl;
-  }
-  void add_tilesize(int i) { this->tile_sizes.push_back(i); }
-
-  friend std::ostream& operator<<(std::ostream& os, const splitMeta& spm) {
-    os << "stp : " << spm.step_id << " / " << spm.adjust_stage_id << "\n";
-    os << "itr : " << spm.origin_itr->name << " / " << spm.problem_size << " / " << spm.parallel
-       << "\n";
-    os << "tile size len " << spm.tile_sizes.size() << "\n";
-    os << "[ ";
-    for (auto i = 0; i < spm.tile_sizes.size(); i++) {
-      os << spm.tile_sizes[i] << ", ";
-    }
-    os << " ]";
-    return os;
-  }
-};
-
 /*! \brief The cost model returning random value for all predictions */
 class AnaModelNode : public CostModelNode {
  public:
@@ -162,8 +129,6 @@ class AnaModelNode : public CostModelNode {
 
   void Predict(const SearchTask& task, const Array<State>& states,
                std::vector<float>* scores) final;
-
-  std::tuple<int, int, float, float> extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features);
 
   static constexpr const char* _type_key = "auto_scheduler.AnaModel";
   TVM_DECLARE_FINAL_OBJECT_INFO(AnaModelNode, CostModelNode);
