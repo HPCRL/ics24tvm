@@ -287,7 +287,57 @@ std::vector<T> findDiff(std::vector<T> x, std::vector<T> y) {        // no-ref, 
     return diff;
 }
 
-// std::tuple<int, int, float, float> SketchPolicyNode::extract_features(SketchPolicyNode* policy, State& state, std::vector<splitMeta*> v_splitMeta_info) {
+
+std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, State* state){
+  const State& init_state = task->compute_dag->init_state;
+ 
+  // Extract all SplitStep
+  // We need to adjust stage id of split_step since new added stages (cache read, write) changes the
+  // id.
+  std::map<int, int> split_step_ids_stage_id_shift_map;
+  // reverse traverse
+  int shift = 0;
+  for (size_t i = (*state)->transform_steps.size() - 1; i > 0; i--) {
+    if ((*state)->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
+        (*state)->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
+      shift += 1;
+    }
+    if (auto ps = (*state)->transform_steps[i].as<SplitStepNode>()) {
+      if (!ps->extent.defined() || !ps->extent.value()->IsInstance<IntImmNode>()) {
+        continue;
+      }
+      split_step_ids_stage_id_shift_map[i] = shift;
+    }
+  }
+  std::vector<splitMeta*> v_splitMeta_info;
+
+  // No split node; No tile size could be changes.
+  if (split_step_ids_stage_id_shift_map.empty()) {
+    return v_splitMeta_info;
+  }
+
+  
+  for (auto itr = split_step_ids_stage_id_shift_map.cbegin();
+       itr != split_step_ids_stage_id_shift_map.cend();) {
+    int step_id = itr->first;
+    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    int orgin_stage_id = ps->stage_id;
+    int adjust_stage_id = orgin_stage_id + itr->second;
+    auto stg = (*state)->stages[adjust_stage_id];
+
+    if (stg->op->name.find("shared") != std::string::npos) {
+      // save remove CHR stage splitnode
+      split_step_ids_stage_id_shift_map.erase(itr++);
+    } else {
+      int extent = GetIntImm(ps->extent.value());
+      splitMeta* spm = new splitMeta(step_id, adjust_stage_id, extent, ps->lengths.size() + 1);
+      v_splitMeta_info.push_back(spm);
+      ++itr;
+    }
+  }
+  return v_splitMeta_info;
+}
+
 std::tuple<int, int, float, float> AnaModelNode::extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features) {
 
   std::cout << "extract_features  " << std::endl;
@@ -1020,28 +1070,35 @@ void AnaModelNode::Predict(const SearchTask& task, const Array<State>& states,
   //features[2] -> shared_trans
   //features[3] -> est_occupancy
 
-  // par for to get the features from extract_features for each state in states
-
+  // parallel_for get the features from extract_features for each state in states
   // features tuple: ['wave_efficiency', 'est_occupancy', 'ILP', 'WLP, 'Concurrent_estimate', 'totalReuse', 'OI_Global'].
-  // support::parallel_for(0, states.size(), [&](int index) {
-  //   std::vector<float> features_extracted;
-  //   features_extracted.reserve(5);
 
-  //   //call extract_features
+  support::parallel_for(0, states.size(), [&](int index) {
+    State state = states[index];
+    std::vector<float> features_extracted;
+    features_extracted.reserve(5);
+    std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, &state);
+    //call extract_features
+    extract_features(task, state, v_splitMeta_info, &features_extracted);
 
+    for (auto fea: features_extracted){
+      std::cout << "fea " << fea << std::endl;
+      features[index].push_back(fea);
+    }
 
-  // });
+  });
 
   
-
-  for (auto feature: features){
-    std::cout << "feature size " << feature.size() << std::endl;
-    // assert( feature.size() != 0 );
-    // std::cout << "fea[0]" << feature[0] << std::endl;   
-    // std::cout << "fea[1]" << feature[1] << std::endl;   
-    // std::cout << "fea[2]" << feature[2] << std::endl;   
-    // std::cout << "fea[3]" << feature[3] << std::endl;
-    // std::cout << "fea[4]" << feature[4] << std::endl;    
+  if (features.size() != 0){
+    std::cout << "feature size " << features.size() << std::endl;
+    for (auto feature: features){
+      // assert( feature.size() != 0 );
+      std::cout << "fea[0]" << feature[0] << std::endl;   
+      std::cout << "fea[1]" << feature[1] << std::endl;   
+      std::cout << "fea[2]" << feature[2] << std::endl;   
+      std::cout << "fea[3]" << feature[3] << std::endl;
+      std::cout << "fea[4]" << feature[4] << std::endl;    
+    }
   }
 
   for (auto i = 0; i < states.size(); i++){
