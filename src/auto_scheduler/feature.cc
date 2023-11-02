@@ -1705,7 +1705,7 @@ std::vector<T> findDiff(std::vector<T> x, std::vector<T> y) {        // no-ref, 
 }
 
 
-std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, State* state){
+std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, const State& state){
   const State& init_state = task->compute_dag->init_state;
  
   // Extract all SplitStep
@@ -1714,12 +1714,12 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, State* state){
   std::map<int, int> split_step_ids_stage_id_shift_map;
   // reverse traverse
   int shift = 0;
-  for (size_t i = (*state)->transform_steps.size() - 1; i > 0; i--) {
-    if ((*state)->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
-        (*state)->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
+  for (size_t i = state->transform_steps.size() - 1; i > 0; i--) {
+    if (state->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
+        state->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
       shift += 1;
     }
-    if (auto ps = (*state)->transform_steps[i].as<SplitStepNode>()) {
+    if (auto ps = state->transform_steps[i].as<SplitStepNode>()) {
       if (!ps->extent.defined() || !ps->extent.value()->IsInstance<IntImmNode>()) {
         continue;
       }
@@ -1737,10 +1737,10 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, State* state){
   for (auto itr = split_step_ids_stage_id_shift_map.cbegin();
        itr != split_step_ids_stage_id_shift_map.cend();) {
     int step_id = itr->first;
-    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    auto ps = state->transform_steps[step_id].as<SplitStepNode>();
     int orgin_stage_id = ps->stage_id;
     int adjust_stage_id = orgin_stage_id + itr->second;
-    auto stg = (*state)->stages[adjust_stage_id];
+    auto stg = state->stages[adjust_stage_id];
 
     if (stg->op->name.find("shared") != std::string::npos) {
       // save remove CHR stage splitnode
@@ -1755,9 +1755,21 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, State* state){
   return v_splitMeta_info;
 }
 
-std::tuple<int, int, float, float> extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features) {
+std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features) {
 
-  std::cout << "extract_features  " << std::endl;
+
+  std::cout << "---extract_features---\n ---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
+  float ILP, WLP, Concurrent_estimate, OI_Global;
+  // initialize them here
+  ILP = 0.0;
+  WLP = 0.0;
+  Concurrent_estimate = 0.0;
+  OI_Global = 0.0;
+
+  float global_trans = (*features)[0];
+  float est_occupancy = (*features)[1];
+  features->clear();
+
   std::cout << task->compute_dag << std::endl;
   IndexExtractor index_extract;
   std::string output_FVI;
@@ -2452,6 +2464,28 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, Stat
   float wave = std::ceil(wave_fac);
   float wave_efficiency = wave_fac/wave;
 
+
+  // push back to features, wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global
+  features->push_back(wave_efficiency);
+  features->push_back(est_occupancy);
+  features->push_back(ILP);
+  features->push_back(WLP);
+  features->push_back(Concurrent_estimate);
+  features->push_back(totalReuse);
+  features->push_back(OI_Global);
+  
+  std::cout << "---Feature---" << std::endl;
+  std::cout << "global_trans " << global_trans << std::endl;
+
+  std::cout << "wave_efficiency " << wave_efficiency << std::endl;
+  std::cout << "est_occupancy " << est_occupancy << std::endl;
+  std::cout << "ILP " << ILP << std::endl;
+  std::cout << "WLP " << WLP << std::endl;
+  std::cout << "Concurrent_estimate " << Concurrent_estimate << std::endl;
+  std::cout << "totalReuse " << totalReuse << std::endl;
+  std::cout << "OI_Global " << OI_Global << std::endl;
+  std::cout << "---Feature End---" << std::endl;
+
   // TODO: change to 0.67
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
   //   return std::make_tuple(-1, -1, -1, -1);
@@ -2459,9 +2493,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, Stat
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
   }
-  // if (thread_block_size > 1024){
-  //   return std::make_tuple(-1, -1, -1, -1);
-  // }
 
   return std::make_tuple(totalShared, totalReg, totalReuse, wave_efficiency);
 }
@@ -2660,9 +2691,40 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
     GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
+
     // std::cout << "feat[0]" << (*feature)[0] << std::endl;
     // std::cout << "feature size : " << feature->size() << std::endl;
     // exit(-1);
+    assert(feature->size() == 4);
+    float global_trans  = (*feature)[1];
+    float shared_trans  = (*feature)[2];
+    float est_occupancy     = (*feature)[3];
+
+    std::cout << "global_trans: "   << global_trans   << std::endl;
+    std::cout << "shared_trans: "   << shared_trans   << std::endl;
+    std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
+
+    // TODO(Chendi): add more features for XGB
+    // features tuple: ['wave_efficiency', 'est_occupancy', 'ILP', 'WLP, 'Concurrent_estimate', 'totalReuse', 'OI_Global'].
+    
+    // std::cout << "state " << state << std::endl;
+
+    std::vector<float> features_extracted;
+    features_extracted.reserve(7);
+    features_extracted.push_back(global_trans);
+    features_extracted.push_back(est_occupancy);
+
+
+    std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
+    //call extract_features
+    extract_features(task, state, v_splitMeta_info, &features_extracted);
+
+    // clear the feature vector
+    feature->clear();
+    for (auto fea: features_extracted){
+      std::cout << "fea " << fea << std::endl;
+      feature->push_back(fea);
+    }
 
   } catch (Error& e) {
     (*error_ct)++;
