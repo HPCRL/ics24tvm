@@ -219,6 +219,9 @@ class MeasureCallbackNode : public Object {
    */
   virtual void Callback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
                         const Array<MeasureResult>& results) = 0;
+  virtual void xCallback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
+                const Array<MeasureResult>& results,
+                std::vector<float>& p_scores, int model_age) = 0 ;
   static constexpr const char* _type_key = "auto_scheduler.MeasureCallback";
   TVM_DECLARE_BASE_OBJECT_INFO(MeasureCallbackNode, Object);
 };
@@ -241,6 +244,9 @@ class PythonBasedMeasureCallbackNode : public MeasureCallbackNode {
 
   void Callback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
                 const Array<MeasureResult>& results) final;
+  void xCallback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
+                const Array<MeasureResult>& results,
+                std::vector<float>& p_scores, int model_age) ;
   static constexpr const char* _type_key = "auto_scheduler.PythonBasedMeasureCallback";
   TVM_DECLARE_FINAL_OBJECT_INFO(PythonBasedMeasureCallbackNode, MeasureCallbackNode);
 };
@@ -496,6 +502,9 @@ class ProgramMeasurerNode : public Object {
    */
   Array<MeasureResult> Measure(const SearchTask& task, const SearchPolicy& policy,
                                const Array<MeasureInput>& inputs, int batch_size = -1);
+  Array<MeasureResult> xMeasure(const SearchTask& task, const SearchPolicy& policy,
+                               const Array<MeasureInput>& inputs, std::vector<float>& p_scores, int model_age,
+                               int batch_size = -1);
   /*!
    * \brief Do measurement silently.
    * This API will not print the measure results to screen.

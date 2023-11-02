@@ -52,6 +52,10 @@ namespace auto_scheduler {
 void GetPerStoreFeature(const PrimFunc& func, int cache_line_size, int max_n_bufs,
                         std::vector<float>* ret, bool log_scale = true);
 
+void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_bufs,
+                        std::vector<float>* ret, 
+                        std::vector<size_t>* res,
+                        tvm::Map<String, tvm::PrimExpr> gpu_params,  bool log_scale = true);
 /*
  * \brief Get the names of elements in the feature vector. Use this for debug and inspection.
  * \param max_n_bufs The maximum number of extracted buffers for one statement
@@ -71,6 +75,8 @@ void GetPerStoreFeatureName(int max_n_bufs, std::vector<std::string>* ret);
 void GetPerStoreFeaturesFromStates(const Array<State>& states, const SearchTask& task,
                                    int skip_first_n_feature_extraction, int max_n_bufs,
                                    std::vector<std::vector<float> >* features);
+
+void GetPerStoreFeaturesFromOneState(const State& states, const SearchTask& task, int max_n_bufs) ;
 
 /*!
  * \brief Get per-store feature from states of different tasks
@@ -117,6 +123,8 @@ void GetPerStoreFeaturesFromMeasurePairs(const Array<MeasureInput>& inputs,
                                          std::vector<std::vector<float> >* features,
                                          std::vector<float>* normalized_throughputs,
                                          std::vector<int>* task_ids);
+
+String GetScopeFromBufferName(String bfname);
 
 }  // namespace auto_scheduler
 }  // namespace tvm

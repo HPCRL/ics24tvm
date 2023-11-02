@@ -30,7 +30,7 @@ import logging
 import numpy as np
 
 from .search_policy import SearchPolicy, SketchPolicy, PreloadMeasuredStates
-from .cost_model import RandomModel, XGBModel
+from .cost_model import RandomModel, XGBModel, AnaModel
 from .utils import array_mean
 from .measure import ProgramMeasurer
 from .measure_record import RecordReader
@@ -99,6 +99,8 @@ def make_search_policies(
                 cost_model.update_from_file(load_log_file)
         elif model_type == "random":
             cost_model = RandomModel()
+        elif model_type == "ana":
+            cost_model = AnaModel()
         else:
             raise ValueError("Invalid search policy: " + search_policy)
 

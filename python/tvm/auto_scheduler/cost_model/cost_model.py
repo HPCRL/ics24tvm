@@ -66,6 +66,39 @@ class RandomModel(CostModel):
         return [x.value for x in _ffi_api.CostModelPredict(self, search_task, states)]
 
 
+@tvm._ffi.register_object("auto_scheduler.AnaModel")
+class AnaModel(CostModel):
+    """A model that returns random estimation for all inputs"""
+
+    def __init__(self):
+        self.__init_handle_by_constructor__(_ffi_api.AnaModel)
+
+    def update(self, inputs, results):
+        """Update the cost model according to new measurement results (training data).
+        Parameters
+        ----------
+        inputs : List[auto_scheduler.measure.MeasureInput]
+            The measurement inputs
+        results : List[auto_scheduler.measure.MeasureResult]
+            The measurement results
+        """
+        _ffi_api.CostModelUpdate(self, inputs, results)
+
+    def predict(self, search_task, states):
+        """Predict the scores of states
+        Parameters
+        ----------
+        search_task : SearchTask
+            The search task of states
+        states : List[State]
+            The input states
+        Returns
+        -------
+        scores: List[float]
+            The predicted scores for all states
+        """
+        return _ffi_api.CostModelPredict(self, search_task, states)
+
 @tvm._ffi.register_func("auto_scheduler.cost_model.random_fill_float")
 def random_fill_float(size, return_ptr):
     """Fills a c++ float array with random numbers in [0, 1]

@@ -207,6 +207,19 @@ void PythonBasedMeasureCallbackNode::Callback(const SearchPolicy& policy,
   }
 }
 
+void PythonBasedMeasureCallbackNode::xCallback(const SearchPolicy& policy,
+                                              const Array<MeasureInput>& inputs,
+                                              const Array<MeasureResult>& results,
+                                              std::vector<float>& p_scores, int model_age) {
+  if (auto* sketch_policy = static_cast<SketchPolicyNode*>(policy.operator->())) {
+    callback_func(GetRef<SketchPolicy>(sketch_policy), inputs, results);
+  } else if (auto* empty_policy = static_cast<EmptyPolicyNode*>(policy.operator->())) {
+    callback_func(GetRef<EmptyPolicy>(empty_policy), inputs, results);
+  } else {
+    LOG(FATAL) << "Unrecognized search policy type. Expect SketchPolicy or EmptyPolicy";
+  }
+}
+
 /********** ProgramMeasurer **********/
 ProgramMeasurer::ProgramMeasurer(ProgramBuilder builder, ProgramRunner runner,
                                  Optional<Array<MeasureCallback>> callbacks, int verbose,
@@ -289,6 +302,91 @@ Array<MeasureResult> ProgramMeasurerNode::Measure(const SearchTask& task,
     if (callbacks) {
       for (const auto& callback : callbacks.value()) {
         callback->Callback(policy, input_batch, result_batch);
+      }
+    }
+
+    // Store result batch
+    for (auto& res : result_batch) {
+      results.push_back(res);
+    }
+
+    if (error_ct > max_continuous_error) {
+      LOG(WARNING) << "Too many errors happened during tuning. Switching to debug mode."
+                   << std::endl;
+      verbose = 2;
+    } else {
+      verbose = old_verbosity;
+    }
+  }
+
+  PrintTimeElapsed(t_begin, "measurement", verbose);
+
+  return results;
+}
+
+Array<MeasureResult> ProgramMeasurerNode::xMeasure(const SearchTask& task,
+                                                  const SearchPolicy& policy,
+                                                  const Array<MeasureInput>& inputs,
+                                                  std::vector<float>& p_scores, int model_age, 
+                                                  int batch_size) {
+  auto t_begin = std::chrono::high_resolution_clock::now();
+
+  Array<MeasureResult> results;
+  results.reserve(inputs.size());
+
+  if (batch_size == -1) {
+    // set default batch size
+    batch_size = builder->n_parallel * 2;
+  }
+
+  int old_verbosity = verbose;
+
+  StdCout(verbose) << "Get " << inputs.size() << " programs to measure:" << std::endl;
+
+  for (size_t i = 0; i < inputs.size(); i += batch_size) {
+    Array<MeasureInput> input_batch(inputs.begin() + i,
+                                    inputs.begin() + std::min(i + batch_size, inputs.size()));
+    std::vector<float> p_scores_batch(p_scores.begin() + i,
+                                    p_scores.begin() + std::min(i + batch_size, p_scores.size()));
+    Array<MeasureResult> result_batch;
+
+    // build and run
+    SilentMeasure(task, input_batch, &result_batch);
+
+    // update current best state according to the new measure result
+    for (size_t j = 0; j < input_batch.size(); ++j) {
+      const String& workload_key = input_batch[j]->task->workload_key;
+      double flops;
+
+      if (result_batch[j]->error_no == 0) {
+        flops = task->compute_dag->flop_ct / FloatArrayMean(result_batch[j]->costs);
+        error_ct = 0;
+        has_valid.insert(workload_key);
+      } else {
+        flops = 0.0;
+        error_ct++;
+      }
+
+      if (flops > best_flops[workload_key]) {
+        best_flops[workload_key] = flops;
+        best_state[workload_key] = input_batch[j]->state;
+        best_ct[workload_key] = ct;
+      }
+
+      ct++;
+      StdCout(verbose, 2) << std::fixed << std::setprecision(2) << Chars('=', 50) << "\n"
+                          << "No: " << ct << "\tGFLOPS: " << flops / 1e9 << " / "
+                          << best_flops[workload_key] / 1e9 << "\tresults: " << result_batch[j]
+                          << "\n"
+                          << Chars('=', 50) << "\n"
+                          << input_batch[j]->state << "\n";
+    }
+
+    // Call callback functions
+    if (callbacks) {
+      for (const auto& callback : callbacks.value()) {
+        callback->Callback(policy, input_batch, result_batch);
+        callback->xCallback(policy, input_batch, result_batch, p_scores_batch, model_age);
       }
     }
 

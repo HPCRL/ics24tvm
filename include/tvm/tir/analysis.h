@@ -252,6 +252,7 @@ TVM_DLL Pass VerifyMemory();
  * \sa tvm::tir::VerifyGPUCode
  */
 TVM_DLL Pass VerifyGPUCode(Map<String, PrimExpr> constraints);
+TVM_DLL Pass xVerifyGPUCode(Map<String, PrimExpr> constraints, std::vector<size_t>* res);
 
 }  // namespace transform
 }  // namespace tir

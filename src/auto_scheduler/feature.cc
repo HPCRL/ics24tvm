@@ -35,6 +35,7 @@
 #include <tvm/tir/op_attr_types.h>
 #include <tvm/tir/stmt_functor.h>
 #include <tvm/tir/transform.h>
+#include <tvm/tir/stmt.h>
 
 #include <algorithm>
 #include <cmath>
@@ -44,6 +45,7 @@
 
 #include "search_policy/utils.h"
 #include "utils.h"
+#include "assert.h"
 
 namespace tvm {
 namespace auto_scheduler {
@@ -84,6 +86,20 @@ struct BufferAccess {
 
 // Data reuse type
 enum class ReuseType : int { kLoopMultipleRead = 0, kSerialMultipleReadWrite = 1, kNoReuse = 2 };
+
+// Feature for an access of a buffer
+struct xBufferAccessFeature {
+  std::string buffer_name;        // The name of the buffer
+  BufferAccessType acc_type;      // The type of the access
+  std::string scope;
+  int64_t touch_size; 
+};
+
+
+struct xFeatureSet {
+  std::vector<xBufferAccessFeature> access_feas;
+};
+
 
 // Feature for an access of a buffer
 struct BufferAccessFeature {
@@ -702,8 +718,13 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     std::vector<float> compute_ops_list;
     double cur_compute_ops;
 
+    BufferMap<int64_t> buffer_touch_map;
+
     // Group 1: Computation related features
     ExtractComputationFeature(node->buffer->data, node->indices, math_op_counter);
+
+    // Our new feature: memory transactions
+    ExtractTransaction(node->buffer->data, node->indices, node->value, math_op_counter, &buffer_touch_map);
 
     // Group 2: Buffer access related features (per buffer)
     ExtractBufferAccessFeature(node->buffer->data, node->indices, node->value, math_op_counter,
@@ -817,6 +838,122 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     fea.threadIdx_y_len = thread_idx_y_len_;
     fea.threadIdx_z_len = thread_idx_z_len_;
     fea.vthread_len = vthread_len_;
+  }
+
+  //Yufan New Add ExtractTransaction
+  void ExtractTransaction(const Var& buffer, const Array<PrimExpr>& indices,
+                                  const PrimExpr& value
+                                  ,const MathOpCounter& math_op_counter, 
+                                  BufferMap<int64_t>* buffer_touch_map ){
+
+
+    // Extract all buffer accesses
+    BufferAccessExtractor buf_extractor;
+    buf_extractor.InsertAccess(buffer, BufferAccessType::kWrite, indices);
+    buf_extractor.ExtractReads(value);
+
+    // for (const auto& x : buf_extractor.buf_accesses) {
+    //     const Var& t = x.first;
+    //     const BufferAccess& acc = x.second;
+    //     std::cout << "buff  " << t->name_hint << "-- "<< cur_auto_unroll_max_step_ << std::endl;
+    //     switch (acc.acc_type)
+    //     {
+    //       case BufferAccessType::kRead:
+    //           std::cout << "read\n";
+    //           break;
+    //       case BufferAccessType::kWrite:
+    //           std::cout << "write\n";
+    //           break;
+    //       case BufferAccessType::kReadWrite:
+    //           std::cout << "read/write\n";
+    //           break;
+    //       default:
+    //         break;
+    //     }
+    // }
+
+    // if (static_cast<int>(is_gpu_) == 1){
+    //   std::cout << "TB shape  << " << threadIdx_x_len_ << ","<< thread_idx_y_len_ << ", "<< thread_idx_z_len_<<  " >>"<< std::endl;
+    //   std::cout << "GRID shape  << " << blockIdx_x_len_ << ","<< block_idx_y_len_ << ", "<< block_idx_z_len_<<  " >>"<< std::endl;
+    // }
+    // if (static_cast<int>(is_gpu_) == 1){
+    //   for (auto x : for_loop_stack_) {
+    //     if (x->kind == ForKind::kSerial){
+    //       std::cout << "SER Var " << x->loop_var << std::endl;
+    //       std::cout << "ext " << x->extent << std::endl;
+    //     }
+    //     else if(x->kind == ForKind::kParallel) {
+    //       std::cout << "TH Var " << x->loop_var << std::endl;
+    //       std::cout << "ext " << x->extent << std::endl;
+    //     }
+    //     else if(x->kind == ForKind::kUnrolled) {
+    //       std::cout << "NROLL Var " << x->loop_var << std::endl;
+    //     }
+    //   }
+    // }
+    int serial_for_loop_num = 0;
+    // Compute touched region for all outer loops
+    for (auto x : for_loop_stack_) {
+      ana_.Bind(x->loop_var, Range::FromMinExtent(x->min, 1), true);
+    }
+
+    int parallel_devide = 1;
+    std::vector<int> tmp_region;
+    for (int i = static_cast<int>(for_loop_stack_.size()) - 1; i >= 0; i--) {
+      const ForNode* p_for = for_loop_stack_[i];
+
+      // std::cout << "-- Var " << p_for->loop_var << p_for->extent << " " << for_loop_stack_[i]->extent 
+      //  << " min "<< for_loop_stack_[i]->min << std::endl;
+
+      //std::cout << "-- Var " << p_for->loop_var << " " << p_for->extent << std::endl;
+      if (p_for->kind == ForKind::kParallel){
+          std::string var_name = p_for->loop_var.get()->name_hint.c_str();
+          if (var_name.find("blockIdx") != std::string::npos) {
+            //std::cout << "blockIdx ~~ " << std::endl;
+            continue;
+          }
+          else{
+            ana_.Bind(p_for->loop_var,
+                Range::FromMinExtent(for_loop_stack_[i]->min, for_loop_stack_[i]->extent), true);
+          }
+      }else{
+          ana_.Bind(p_for->loop_var,
+                Range::FromMinExtent(for_loop_stack_[i]->min, for_loop_stack_[i]->extent), true);
+      }
+
+
+        int64_t mem_bytes = 0;
+        for (const auto& x : buf_extractor.buf_accesses) {
+          const Var& t = x.first;
+          const BufferAccess& acc = x.second;
+
+          ComputeRegion(acc.indices, &ana_, &tmp_region);
+          int64_t touched_size = ElementProduct(tmp_region);
+
+          // std::cout<< "Bffer name : " << t->name << " scope "<< GetScopeFromBufferName(t->name) 
+          // << " touched_size " << touched_size/parallel_devide << std::endl;
+          (*buffer_touch_map)[t] = touched_size/parallel_devide;
+      }
+    }
+
+    xFeatureSet& fea = xbuffer_features[buffer];
+    std::vector<xBufferAccessFeature> xacc_feas;
+
+    for (const auto& x : buf_extractor.buf_accesses) {
+      xacc_feas.emplace_back();
+      xBufferAccessFeature& xacc_fea = xacc_feas.back();
+      const Var& t = x.first;
+      const BufferAccess& acc = x.second;
+
+      xacc_fea.buffer_name = t->name_hint;
+      xacc_fea.scope = GetScopeFromBufferName(t->name_hint);
+      xacc_fea.acc_type = acc.acc_type;
+      xacc_fea.touch_size = (*buffer_touch_map)[t];
+    }
+    //Per Stmt --> List of each buffer info
+    //std::cout << "???? xacc_feas size " << xacc_feas.size() << std::endl;
+    fea.access_feas = xacc_feas;
+
   }
 
   // Extract buffer access related features (group 2)
@@ -1064,6 +1201,7 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
 
   // Stores FeatureSet for every buffer
   BufferMap<FeatureSet> buffer_features;
+  BufferMap<xFeatureSet> xbuffer_features;
 
  private:
   // The shared arithmetic analyzer
@@ -1353,6 +1491,127 @@ void GetPerStoreFeatureName(int max_n_bufs, std::vector<std::string>* ret) {
   // section total : 3
 }
 
+void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_bufs,
+                        std::vector<float>* ret, 
+                        std::vector<size_t>* res,
+                        tvm::Map<String, tvm::PrimExpr> gpu_params, bool log_scale) {
+  PerStoreFeatureExtractor extractor(cache_line_size, func->buffer_map);
+  extractor(func->body);
+  const FeatureSet& tmp = extractor.buffer_features.begin()->second;
+  int grid_dimx = tmp.blockIdx_x_len;
+  int grid_dimy = tmp.blockIdx_y_len;
+  int grid_dimz = tmp.blockIdx_z_len;
+  int block_dimx = tmp.threadIdx_x_len;
+  int block_dimy = tmp.threadIdx_y_len;
+  int block_dimz = tmp.threadIdx_z_len;
+
+  // std::cout << "TBx : " << tmp.blockIdx_x_len << std::endl;
+  // std::cout << "TBx : " << tmp.blockIdx_y_len << std::endl;
+  // std::cout << "TBx : " << tmp.blockIdx_z_len << std::endl;
+  // std::cout << "THx : " << tmp.threadIdx_x_len << std::endl;
+  // std::cout << "THx : " << tmp.threadIdx_y_len << std::endl;
+  // std::cout << "THx : " << tmp.threadIdx_z_len << std::endl;
+  int num_TB = grid_dimx * grid_dimy * grid_dimz;
+  int num_warp = std::ceil( (float)block_dimx*block_dimy*block_dimz/32);
+
+
+  int global_trans = 0;
+  int shared_trans = 0;
+  int local_trans = 0;
+
+  //Need to design return
+  for (const auto& x : extractor.xbuffer_features){
+    // std::cout << "---- Summary ---" << std::endl;
+    // std::cout << "num_warp : " << num_warp << std::endl;
+    // std::cout << "num_TB : " << num_TB << std::endl;
+    const xFeatureSet& fea_set = x.second;
+    for (const auto& xacc_fea : fea_set.access_feas) {
+      // std::cout << "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
+      //std::cout << "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
+      // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
+      // std::cout << "Buffer warp trans : " << warp_trans << std::endl;
+      // Accumulate here
+      if (xacc_fea.scope == "shared") {
+        shared_trans += warp_trans;
+      }
+      else if (xacc_fea.scope == "global") {
+        global_trans += warp_trans;
+      }
+      else if (xacc_fea.scope == "local") {
+        local_trans += warp_trans;
+      }
+    }
+  }
+  // std::cout << "global_trans : " << global_trans << std::endl;
+  // std::cout << "shared_trans : " << shared_trans << std::endl;
+  // std::cout << "local_trans : " << local_trans << std::endl;
+
+
+
+  global_trans *= num_TB;
+  shared_trans *= num_TB;
+  local_trans *= num_TB;
+
+   // add occupancy
+  int totalShared = (*res)[1];
+  int registersUsed_per_thread = (*res)[0]+20; //hueristic
+  int thread_per_TB = (*res)[2];
+  thread_per_TB = std::ceil( (float)thread_per_TB/32) * 32;
+
+  std::cout << "totalShared (#): " << totalShared << std::endl;
+  std::cout << "thread_per_TB (#) : " << thread_per_TB << std::endl;
+  std::cout << "registersUsed_per_thread (#): " << registersUsed_per_thread << std::endl;
+
+  assert (totalShared != 0);
+  assert (thread_per_TB != 0);
+
+
+  int totalRegistersUsedBlock = registersUsed_per_thread * thread_per_TB;
+
+  int blocksPerSMWarps = int(gpu_params["max_threads_per_block"].as<IntImmNode>()->value / thread_per_TB);
+  int blocksPerSMSharedMemory = int(gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value  / totalShared);
+  int blocksPerSMReg = ( 65536 / (totalRegistersUsedBlock+20));
+
+  int maxWarpsSM = 64;
+  int blocksPerSM = std::min(std::min(blocksPerSMWarps, blocksPerSMSharedMemory), blocksPerSMReg);
+  int warpsPerSM = num_warp * blocksPerSM;
+
+  float occupancy = warpsPerSM / (maxWarpsSM * 1.0);
+
+  std::cout << "global_trans : " << global_trans << std::endl;
+  std::cout << "shared_trans : " << shared_trans << std::endl;
+  std::cout << "local_trans : " << local_trans << std::endl;
+
+  std::cout << "max_threads_per_block : " << gpu_params["max_threads_per_block"].as<IntImmNode>()->value << std::endl;
+  std::cout << "max_shared_memory_per_block : " << gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value << std::endl;
+
+  std::cout << "thread_per_TB : " << thread_per_TB << std::endl;
+  std::cout << "totalShared : " << totalShared << std::endl;
+  std::cout << "registersUsed_per_thread : " << registersUsed_per_thread << std::endl;
+
+  std::cout << "blocksPerSMWarps : " << blocksPerSMWarps << std::endl;
+  std::cout << "blocksPerSMSharedMemory : " << blocksPerSMSharedMemory << std::endl;
+  std::cout << "blocksPerSMReg : " << blocksPerSMReg << std::endl;
+
+  std::cout << "T occupancy : " << occupancy << std::endl;
+  ret->push_back(1);
+  ret->push_back(global_trans);
+  ret->push_back(shared_trans);
+  ret->push_back(occupancy);
+  // (*ret)[0] = 1;
+  // (*ret)[1] = global_trans;
+  // (*ret)[2] = shared_trans;
+  // (*ret)[3] = occupancy;
+  std::cout << "ret0 : " << (*ret)[0] << std::endl;
+  std::cout << "ret1 : " << (*ret)[1] << std::endl;
+  std::cout << "ret2 : " << (*ret)[2] << std::endl;
+  std::cout << "ret3 : " << (*ret)[3] << std::endl;
+
+  std::cout << "@@ OuR ret vect size : " << ret->size() << std::endl;
+}
+
 void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, int max_n_bufs,
                                    std::vector<float>* feature, std::atomic<int>* error_ct) {
   te::Schedule sch;
@@ -1377,6 +1636,8 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
         pass_ctx->GetConfig<Bool>("tir.disable_vectorize", Bool(false)).value();
     bool instrument_bound_checkers =
         pass_ctx->GetConfig<Bool>("tir.instrument_bound_checkers", Bool(false)).value();
+    std::vector<size_t> res; //to keep actual resource usage
+    res.reserve(5);
 
     if (IsGPUTask(task)) {
       auto pass_list = Array<tvm::transform::Pass>();
@@ -1397,7 +1658,8 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
           {"max_vector_bytes", task->hardware_params->vector_unit_bytes},
           {"max_vthread", task->hardware_params->max_vthread_extent},
       };
-      pass_list.push_back(tir::transform::VerifyGPUCode(gpu_params));
+    //   pass_list.push_back(tir::transform::VerifyGPUCode(gpu_params));
+      pass_list.push_back(tir::transform::xVerifyGPUCode(gpu_params, &res));
       const auto& optimize = tir::transform::Sequential(pass_list);
       optimize(mod);
     }
@@ -1405,7 +1667,28 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
         tir::transform::Sequential(Array<tvm::transform::Pass>{tir::transform::Simplify()});
     mod = optimize(std::move(mod));
     PrimFunc prim_func = Downcast<PrimFunc>(mod->Lookup(name));
-    GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
+    //default 164 feature here
+    // GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
+    tvm::Map<String, tvm::PrimExpr> gpu_params{
+          {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
+          {"max_local_memory_per_block", task->hardware_params->max_local_memory_per_block},
+          {"max_threads_per_block", task->hardware_params->max_threads_per_block},
+    };
+
+     /**
+     * @brief 
+     * //res is from xVerifyGPUCode Line 1569
+     *    res->push_back(local_memory_per_block_);
+     *    res->push_back(shared_memory_per_block_);
+     *    res->push_back(thread_per_block_);
+     */
+    // std::vector<float> our_feature;
+    // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
+    GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
+    // std::cout << "feat[0]" << (*feature)[0] << std::endl;
+    // std::cout << "feature size : " << feature->size() << std::endl;
+    // exit(-1);
+
   } catch (Error& e) {
     (*error_ct)++;
   }
@@ -1582,6 +1865,22 @@ void GetPerStoreFeaturesFromMeasurePairs(const Array<MeasureInput>& inputs,
 
   GetPerStoreFeaturesFromStates(states, tasks, skip_first_n_feature_extraction, max_n_bufs,
                                 features);
+}
+
+//Yufan: help function for get buffer scope from name
+String GetScopeFromBufferName(String bfname){
+  std::string res;
+  std::string tmp = bfname.data();
+  size_t found = tmp.find('.');
+  if (found != std::string::npos){
+    res = tmp.substr(found+1, tmp.size());
+  }
+  else{
+    res = "global";
+  }
+
+  //std::cout << tmp << " -- " << res;
+  return res;
 }
 
 /*

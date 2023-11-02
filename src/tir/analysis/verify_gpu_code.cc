@@ -41,7 +41,9 @@ class GPUCodeVerifier : public StmtExprVisitor {
   std::vector<String> Verify(Stmt stmt, int64_t max_local_memory_per_block,
                              int64_t max_shared_memory_per_block, int64_t max_threads_per_block,
                              int64_t max_thread_x, int64_t max_thread_y, int64_t max_thread_z,
-                             int64_t max_vthread, int64_t max_vector_bytes, int64_t max_kernels) {
+                             int64_t max_vthread, int64_t max_vector_bytes, int64_t max_kernels,
+                             std::vector<size_t>* res = nullptr
+                             ) {
     max_local_memory_per_block_ = static_cast<size_t>(max_local_memory_per_block);
     max_shared_memory_per_block_ = static_cast<size_t>(max_shared_memory_per_block);
     max_threads_per_block_ = static_cast<size_t>(max_threads_per_block);
@@ -55,6 +57,10 @@ class GPUCodeVerifier : public StmtExprVisitor {
 
     // TODO(jcf94): Add support of detecting CUDA Misaligned Address error
     this->VisitStmt(stmt);
+
+    res->push_back(local_memory_per_block_);
+    res->push_back(shared_memory_per_block_);
+    res->push_back(thread_per_block_);
 
     return errors_;
   }
@@ -294,6 +300,50 @@ std::vector<String> VerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> c
                          max_vthread, max_vector_bytes, max_kernels);
 }
 
+std::vector<String> xVerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> constraints, std::vector<size_t>* res) {
+  GPUCodeVerifier verifier;
+
+  int64_t max_local_memory_per_block = INT64_MAX;
+  int64_t max_shared_memory_per_block = INT64_MAX;
+  int64_t max_threads_per_block = INT64_MAX;
+  int64_t max_thread_x = INT64_MAX;
+  int64_t max_thread_y = INT64_MAX;
+  int64_t max_thread_z = INT64_MAX;
+  int64_t max_vthread = INT64_MAX;
+  int64_t max_vector_bytes = INT64_MAX;
+  int64_t max_kernels = INT64_MAX;
+
+  for (auto iter : constraints) {
+    const IntImmNode* val = iter.second.as<IntImmNode>();
+    if (iter.first == "max_local_memory_per_block") {
+      max_local_memory_per_block = val->value;
+    } else if (iter.first == "max_shared_memory_per_block") {
+      max_shared_memory_per_block = val->value;
+    } else if (iter.first == "max_threads_per_block") {
+      max_threads_per_block = val->value;
+    } else if (iter.first == "max_thread_x") {
+      max_thread_x = val->value;
+    } else if (iter.first == "max_thread_y") {
+      max_thread_y = val->value;
+    } else if (iter.first == "max_thread_z") {
+      max_thread_z = val->value;
+    } else if (iter.first == "max_vthread") {
+      max_vthread = val->value;
+    } else if (iter.first == "max_vector_bytes") {
+      max_vector_bytes = val->value;
+    } else if (iter.first == "max_kernels") {
+      max_kernels = val->value;
+    } else {
+      LOG(FATAL) << "Invalid check item: " << iter.first;
+    }
+  }
+
+  return verifier.Verify(func->body, max_local_memory_per_block, max_shared_memory_per_block,
+                         max_threads_per_block, max_thread_x, max_thread_y, max_thread_z,
+                         max_vthread, max_vector_bytes, max_kernels, 
+                         res);
+}
+
 bool VerifyGPUCode(const PrimFunc& func, Map<String, PrimExpr> constraints) {
   auto errs = VerifyGPUCode_(func, constraints);
   return errs.size() == 0;
@@ -323,6 +373,28 @@ Pass VerifyGPUCode(Map<String, PrimExpr> constraints) {
     return mod;
   };
   return tvm::transform::CreateModulePass(pass_func, 0, "tir.VerifyGPUCode", {});
+}
+
+Pass xVerifyGPUCode(Map<String, PrimExpr> constraints, std::vector<size_t>* res) {
+  auto pass_func = [=](IRModule mod, PassContext ctx) {
+    for (auto kv : mod->functions) {
+      if (auto* n = kv.second.as<PrimFuncNode>()) {
+        auto func = GetRef<PrimFunc>(n);
+        auto errs = xVerifyGPUCode_(func, constraints, res);
+        if (errs.size() != 0) {
+          std::stringstream s;
+          for (auto& err : errs) {
+            s << "    " << err << std::endl;
+          }
+          LOG(FATAL) << "RuntimeError: GPU constraint(s) violated:\n"
+                     << s.str() << "  In function\n"
+                     << func;
+        }
+      }
+    }
+    return mod;
+  };
+  return tvm::transform::CreateModulePass(pass_func, 0, "tir.xVerifyGPUCode", {});
 }
 
 TVM_REGISTER_GLOBAL("tir.transform.VerifyGPUCode").set_body_typed(VerifyGPUCode);

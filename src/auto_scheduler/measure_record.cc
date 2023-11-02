@@ -329,6 +329,22 @@ void WriteMeasureRecords(std::ostream* os, const Array<MeasureInput>& inputs,
   }
 }
 
+void xWriteMeasureRecords(std::ostream* os, const Array<MeasureInput>& inputs,
+                         const Array<MeasureResult>& results, std::vector<float>& p_scores, int model_age,
+                         const std::string log_version) {
+  dmlc::JSONWriter writer(os);
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    writer.BeginObject(false);
+    writer.WriteObjectKeyValue("i", *inputs[i].operator->());
+    writer.WriteObjectKeyValue("r", *results[i].operator->());
+    writer.WriteObjectKeyValue("s", p_scores[i]);
+    writer.WriteObjectKeyValue("ag", model_age);
+    writer.WriteObjectKeyValue("v", log_version);
+    writer.EndObject();
+    *os << "\n";
+  }
+}
+
 void ReadMeasureRecord(const std::string& str, MeasureInputNode* inp, MeasureResultNode* res,
                        std::string* log_version) {
   std::istringstream ss(str);
@@ -353,6 +369,12 @@ void RecordToFileNode::Callback(const SearchPolicy& policy, const Array<MeasureI
                                 const Array<MeasureResult>& results) {
   std::ofstream ofs(filename, std::ofstream::app);
   WriteMeasureRecords(&ofs, inputs, results);
+}
+
+void RecordToFileNode::xCallback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
+                                const Array<MeasureResult>& results, std::vector<float>& p_scores, int model_age) {
+  std::ofstream ofs("x"+filename, std::ofstream::app);
+  xWriteMeasureRecords(&ofs, inputs, results, p_scores, model_age);
 }
 
 RecordReader::RecordReader(String filename) {

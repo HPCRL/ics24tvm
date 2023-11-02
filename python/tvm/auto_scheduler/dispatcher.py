@@ -31,7 +31,7 @@ import numpy as np
 
 from tvm.contrib.utils import tempdir
 from tvm.tir.expr import FloatImm
-from .cost_model import RandomModel, XGBModel
+from .cost_model import RandomModel, XGBModel, AnaModel
 from .measure import LocalRPCMeasureContext
 from .measure_record import RecordToFile, load_records
 from .search_policy import PreloadMeasuredStates, SketchPolicy

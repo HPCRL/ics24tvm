@@ -118,6 +118,73 @@ class RandomModel : public CostModel {
   using ContainerType = RandomModelNode;
 };
 
+
+class splitMeta {
+ public:
+  int step_id;
+  int adjust_stage_id;
+  int problem_size;
+  Iterator origin_itr;
+  std::vector<int> tile_sizes;
+  bool parallel;
+
+  splitMeta(int step_id, int adjust_stage_id, int problem_size, int tile_len) {
+    this->step_id = step_id;
+    this->adjust_stage_id = adjust_stage_id;
+    this->problem_size = problem_size;
+  }
+  ~splitMeta() {
+    // std::cout << "delete class" << std::endl;
+  }
+  void add_tilesize(int i) { this->tile_sizes.push_back(i); }
+
+  friend std::ostream& operator<<(std::ostream& os, const splitMeta& spm) {
+    os << "stp : " << spm.step_id << " / " << spm.adjust_stage_id << "\n";
+    os << "itr : " << spm.origin_itr->name << " / " << spm.problem_size << " / " << spm.parallel
+       << "\n";
+    os << "tile size len " << spm.tile_sizes.size() << "\n";
+    os << "[ ";
+    for (auto i = 0; i < spm.tile_sizes.size(); i++) {
+      os << spm.tile_sizes[i] << ", ";
+    }
+    os << " ]";
+    return os;
+  }
+};
+
+/*! \brief The cost model returning random value for all predictions */
+class AnaModelNode : public CostModelNode {
+ public:
+  /*! \brief Pointer to a random number generator function */
+  const TypedPackedFunc<void(size_t, void*)>* random_number_func;
+
+  void Update(const Array<MeasureInput>& inputs, const Array<MeasureResult>& results) final;
+
+  void Predict(const SearchTask& task, const Array<State>& states,
+               std::vector<float>* scores) final;
+
+  std::tuple<int, int, float, float> extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features);
+
+  static constexpr const char* _type_key = "auto_scheduler.AnaModel";
+  TVM_DECLARE_FINAL_OBJECT_INFO(AnaModelNode, CostModelNode);
+};
+
+/*!
+ * \brief Managed reference to AnaModelNode.
+ * \sa AnaModelNode
+ * our analytic 
+ */
+class AnaModel : public CostModel {
+ public:
+  AnaModel();
+  explicit AnaModel(::tvm::runtime::ObjectPtr<::tvm::runtime::Object> n) : CostModel(n) {}
+
+  AnaModelNode* operator->() const { return static_cast<AnaModelNode*>(data_.get()); }
+
+  TVM_DEFINE_DEFAULT_COPY_MOVE_AND_ASSIGN(AnaModel);
+  using ContainerType = AnaModelNode;
+};
+
 /*! \brief A wrapper for cost model defined by python code
  *  This class will call functions defined in the python */
 class PythonBasedModelNode : public CostModelNode {

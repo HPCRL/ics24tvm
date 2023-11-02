@@ -42,6 +42,7 @@
 #include <vector>
 
 #include "sketch_policy_rules.h"
+#include "sketch_analysis.h"
 
 namespace tvm {
 namespace auto_scheduler {
@@ -176,6 +177,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<State> best_states, random_states;
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
+    //Yufan: define model_age to check correaltion of score & time
+    // Every model update; age increases 1
+    int model_age = 1;
+
     while (ct < n_trials) {
       if (!inputs.empty()) {
         auto t_begin = std::chrono::high_resolution_clock::now();
@@ -183,6 +188,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         // Retrain the cost model before the next search round
         PrintTitle("Train cost model", verbose);
         program_cost_model->Update(inputs, results);
+        model_age += 1;
 
         PrintTimeElapsed(t_begin, "training", verbose);
       }
@@ -213,10 +219,27 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         // Reset the retry count
         empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
       }
+      std::vector<float> r_scores;
+      if (!inputs.empty()) {
+        r_scores.reserve(inputs.size());
+        Array<State> measure_states;
+        measure_states.reserve(inputs.size());
+        for (size_t j = 0; j < inputs.size(); ++j) {
+            State tmp = inputs[j].get()->state;
+            measure_states.push_back(tmp);
+        }
+        program_cost_model->Predict(search_task, measure_states, &r_scores);
+
+        // for (size_t j = 0; j < inputs.size(); ++j) {
+        //     std::cout << "NEW )) state " << inputs[j].get()->state 
+        //     << "\n !! NEW )) score " << r_scores[j] << std::endl;
+        // }
+      }
 
       // Measure candidate states
       PrintTitle("Measure", verbose);
-      results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+      //results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+      results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
       ct += inputs.size();
 
       // Check if reach the early stopping condition
@@ -494,12 +517,23 @@ Array<State> SketchPolicyNode::EvolutionarySearch(const Array<State>& init_popul
   int num_iters = GetIntParam(params, SketchParamKey::EvolutionarySearch::num_iters);
 
   bool is_cost_model_reasonable = !program_cost_model->IsInstance<RandomModelNode>();
-  if (!is_cost_model_reasonable && num_iters > 2) {
-    num_iters = 2;
-    StdCout(verbose) << "GA iteration number has been adjusted to " << num_iters
-                     << " due to random cost model" << std::endl;
-  }
+  // if (!is_cost_model_reasonable && num_iters > 2) {
+  //   num_iters = 2;
+  //   StdCout(verbose) << "GA iteration number has been adjusted to " << num_iters
+  //                    << " due to random cost model" << std::endl;
+  // }
 
+  if (program_cost_model->IsInstance<PythonBasedModelNode>()){
+    std::cout<< "PythonBasedModelNode " << std::endl;
+  }
+  else if (program_cost_model->IsInstance<RandomModelNode>()){
+    std::cout<< "RandomModelNode " << std::endl;
+  }
+    else if (program_cost_model->IsInstance<AnaModelNode>()){
+    std::cout<< "AnaModelNode " << std::endl;
+  }
+  std::cout<< "EvolutionarySearch num_iters " << num_iters<< std::endl;
+  
   // Two ping pong buffers to avoid copy.
   Array<State> states_buf1{init_population}, states_buf2;
   states_buf1.reserve(population);

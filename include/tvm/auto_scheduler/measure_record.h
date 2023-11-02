@@ -44,6 +44,8 @@ class RecordToFileNode : public MeasureCallbackNode {
 
   void Callback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
                 const Array<MeasureResult>& results) final;
+  void xCallback(const SearchPolicy& policy, const Array<MeasureInput>& inputs,
+                const Array<MeasureResult>& results, std::vector<float>& p_scores, int model_age);
 
   static constexpr const char* _type_key = "auto_scheduler.RecordToFile";
   TVM_DECLARE_FINAL_OBJECT_INFO(RecordToFileNode, MeasureCallbackNode);
@@ -122,6 +124,9 @@ class RecordReader : public ObjectRef {
  */
 void WriteMeasureRecords(std::ostream* os, const Array<MeasureInput>& inputs,
                          const Array<MeasureResult>& results,
+                         const std::string log_version = AUTO_SCHEDULER_LOG_VERSION);
+void xWriteMeasureRecords(std::ostream* os, const Array<MeasureInput>& inputs,
+                         const Array<MeasureResult>& results, std::vector<float>& p_scores, int model_age,
                          const std::string log_version = AUTO_SCHEDULER_LOG_VERSION);
 
 /*!
