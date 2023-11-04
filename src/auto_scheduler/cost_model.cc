@@ -81,16 +81,12 @@ void AnaModelNode::Update(const Array<MeasureInput>& inputs,
 void AnaModelNode::Predict(const SearchTask& task, const Array<State>& states,
                               std::vector<float>* scores) {
   std::cout << "AnaModelNode::Predict" << std::endl;
-  std::cout << "size of states " << states.size() << std::endl;
-  std::cout << "size of scores " << scores->size() << std::endl;
-
   scores->resize(states.size());
-  std::cout << "size of states " << states.size() << std::endl;
-  std::cout << "size of scores " << scores->size() << std::endl;
+  // std::cout << "size of states " << states.size() << std::endl;
+  // std::cout << "size of scores " << scores->size() << std::endl;
   int max_n_bufs = 5;
   std::vector<std::vector<float>> features;
   auto_scheduler::GetPerStoreFeaturesFromStates(states, task, 0, max_n_bufs, &features);
-
 
   //features[1] -> global_trans
   //features[2] -> shared_trans
