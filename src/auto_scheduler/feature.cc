@@ -1595,8 +1595,10 @@ double computeOI_Global(float global_trans, const std::map<std::string, Parallel
     for (const auto &item : true_reduction_data_map) {
         total_OI *= item.second.pz;
     }
-    for (const auto &item : stencil_reduction_data_map) {
-        total_OI *= item.second.pz;
+    if (stencil_reduction_data_map.size() > 0) {
+      for (const auto &item : stencil_reduction_data_map) {
+          total_OI *= item.second.pz;
+      }
     }
     OI_Global = total_OI * 1.0 / (32.0 * float(global_trans));
 
@@ -1864,7 +1866,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           // std::cout << "p buffer " << p.first->name << std::endl;
           // int reg_buffer_size = 1;
           for (auto vv : p.second) {  // buffer access
-            std::cout << Array<PrimExpr>(vv) << std::endl;
+            // std::cout << Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               index_extract.Extract(indx);
               // std::cout << "indx : " << indx << std::endl;
