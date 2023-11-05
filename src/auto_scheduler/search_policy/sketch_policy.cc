@@ -179,7 +179,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<MeasureResult> results;
     //Yufan: define model_age to check correaltion of score & time
     // Every model update; age increases 1
-    int model_age = 1;
+    // int model_age = 1;
 
     while (ct < n_trials) {
       if (!inputs.empty()) {
@@ -188,7 +188,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         // Retrain the cost model before the next search round
         PrintTitle("Train cost model", verbose);
         program_cost_model->Update(inputs, results);
-        model_age += 1;
+        // model_age += 1;
 
         PrintTimeElapsed(t_begin, "training", verbose);
       }
@@ -238,8 +238,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
       // Measure candidate states
       PrintTitle("Measure", verbose);
-      //results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-      results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+      results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+      // results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
       ct += inputs.size();
 
       // Check if reach the early stopping condition
