@@ -152,6 +152,8 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
+  Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* random_states = nullptr);
+
   /*!
    * \brief Pick states from best states and random states with eps-greedy policy.
    * \param best_states States picked by cost model.
@@ -162,6 +164,9 @@ class SketchPolicyNode : public SearchPolicyNode {
   Array<MeasureInput> PickStatesWithEpsGreedy(const Array<State>& best_states,
                                               const Array<State>& random_states,
                                               int remaining_n_trials);
+
+  Array<MeasureInput> PackState(const Array<State>& best_states,
+                                            int remaining_n_trials);
 
   /*! \brief The number of states to measure per iteration. */
   int num_measure_per_iter_;

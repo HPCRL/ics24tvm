@@ -177,33 +177,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<State> best_states, random_states;
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
-    //Yufan: define model_age to check correaltion of score & time
-    // Every model update; age increases 1
-    // int model_age = 1;
-
+    Array<State> local_min_best_states;
+    
     while (ct < n_trials) {
-      if (!inputs.empty()) {
-        auto t_begin = std::chrono::high_resolution_clock::now();
-
-        // Retrain the cost model before the next search round
-        PrintTitle("Train cost model", verbose);
-        program_cost_model->Update(inputs, results);
-        // model_age += 1;
-
-        PrintTimeElapsed(t_begin, "training", verbose);
-      }
-
-      // Search one round to get promising states
-      PrintTitle("Search", verbose);
-      best_states = SearchOneRound(num_random * 3, &random_states);
-
-      // Infer bound. This is necessary for computing the correct ToStr() for redundancy check
-      best_states = search_task->compute_dag.InferBound(best_states);
-      random_states = search_task->compute_dag.InferBound(random_states);
-
-      // Pick `num_measure_per_iter` states to measure, check hash to remove already measured state
-      // Also pick some random states to do eps-greedy
-      inputs = PickStatesWithEpsGreedy(best_states, random_states, n_trials - ct);
+      local_min_best_states = SearchOneRoundPruePredict(0, &random_states);
+      local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
+      inputs = PackState(best_states, n_trials - ct);
 
       // Currently it's hard to detect if all of the search space has been traversed
       // Stop if no extra valid states found in several retries
@@ -219,27 +198,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         // Reset the retry count
         empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
       }
-      std::vector<float> r_scores;
-      if (!inputs.empty()) {
-        r_scores.reserve(inputs.size());
-        Array<State> measure_states;
-        measure_states.reserve(inputs.size());
-        for (size_t j = 0; j < inputs.size(); ++j) {
-            State tmp = inputs[j].get()->state;
-            measure_states.push_back(tmp);
-        }
-        program_cost_model->Predict(search_task, measure_states, &r_scores);
-
-        // for (size_t j = 0; j < inputs.size(); ++j) {
-        //     std::cout << "NEW )) state " << inputs[j].get()->state 
-        //     << "\n !! NEW )) score " << r_scores[j] << std::endl;
-        // }
-      }
 
       // Measure candidate states
       PrintTitle("Measure", verbose);
       results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-      // results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
       ct += inputs.size();
 
       // Check if reach the early stopping condition
@@ -258,6 +220,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     }
     PrintTitle("Done", verbose);
 
+    //think return state;
     return measurer->best_state[search_task->workload_key];
   }
 }
@@ -333,6 +296,37 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
   }
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
 }
+
+Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* random_states) {
+  // Get parameters
+  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  int num_use_measured = std::min(
+      static_cast<int>(measured_states_vector_.size()),
+      static_cast<int>(
+          GetDoubleParam(params, SketchParamKey::SampleInitPopulation::use_measured_ratio) *
+          population));
+
+  // 1. Generate sketches
+  if (sketch_cache_.empty()) {
+    sketch_cache_ = GenerateSketches();
+  }
+
+  // 2. Sample the init population
+  Array<State> init_population = SampleInitPopulation(sketch_cache_);
+
+  // 3. Perform evolutionary search.
+  // Also insert already measured good states to the initial population
+  std::vector<int> indices = Argsort(measured_states_throughputs_);
+  for (int i = 0; i < num_use_measured; i++) {
+    init_population.push_back(measured_states_vector_[indices[i]]);
+  }
+  // Sample some random states for eps-greedy
+  if (num_random_states > 0 && random_states != nullptr) {
+    *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
+  }
+  return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
+}
+
 
 Array<State> SketchPolicyNode::GenerateSketches() {
   const State& init_state = search_task->compute_dag->init_state;
@@ -704,6 +698,38 @@ Array<MeasureInput> SketchPolicyNode::PickStatesWithEpsGreedy(const Array<State>
 
   return inputs;
 }
+
+Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
+                                                              int remaining_n_trials) {
+
+  Array<MeasureInput> inputs;
+  size_t offset_best_upperbound = 0;
+  size_t offset_best = 0;
+
+  //constrcut all state until no more than remaining_n_trials
+  if (best_states.size() > remaining_n_trials){
+    offset_best_upperbound = remaining_n_trials;
+  }
+  else{
+    offset_best_upperbound = best_states.size();
+  }
+
+  while (offset_best < offset_best_upperbound ){
+    State state;
+    state = best_states[offset_best++];
+    // Check if it has already been measured
+    std::string state_str = state.ToStr();
+    if (!measured_states_set_.count(state_str)) {
+      measured_states_set_.insert(std::move(state_str));
+      measured_states_vector_.push_back(state);
+      inputs.push_back(MeasureInput(search_task, state));
+    }
+  }
+  return inputs;
+}
+
+
+
 
 /********** PreloadCustomSketchRule **********/
 TVM_REGISTER_OBJECT_TYPE(PreloadCustomSketchRuleNode);
