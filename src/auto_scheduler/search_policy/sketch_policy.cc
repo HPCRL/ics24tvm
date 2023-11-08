@@ -174,52 +174,51 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
     int ct = 0;
     int empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
-    Array<State> best_states, random_states;
+    Array<State> best_states, next_states;
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
     Array<State> local_min_best_states;
 
     bool firsttime_random = true;
-    
+    int step = 0;
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(0, &random_states, firsttime_random);
+      local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
       firsttime_random = false;
-      local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
-      inputs = PackState(best_states, n_trials - ct);
+      if (!local_min_best_states.empty()){
+        local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
+        inputs = PackState(best_states, n_trials - ct);
 
-      // Currently it's hard to detect if all of the search space has been traversed
-      // Stop if no extra valid states found in several retries
-      if (inputs.empty()) {
-        if (empty_retry_count-- > 0) {
-          continue;
+        // Currently it's hard to detect if all of the search space has been traversed
+        // Stop if no extra valid states found in several retries
+        if (inputs.empty()) {
+          if (empty_retry_count-- > 0) {
+            continue;
+          } else {
+            StdCout(verbose) << "It seems all candidates in the search space have been measured."
+                            << std::endl;
+            break;
+          }
         } else {
-          StdCout(verbose) << "It seems all candidates in the search space have been measured."
-                           << std::endl;
-          break;
+          // Reset the retry count
+          empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
         }
-      } else {
-        // Reset the retry count
-        empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
+
+        // Measure candidate states
+        PrintTitle("Measure", verbose);
+        results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+        ct += inputs.size();
+
+        
+        // Update measured states throughputs. These states will join the EvolutionarySearch in later
+        // search rounds.
+        for (const auto& res : results) {
+          measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+        }
       }
-
-      // Measure candidate states
-      PrintTitle("Measure", verbose);
-      results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-      ct += inputs.size();
-
-      // Check if reach the early stopping condition
-      if (ct - measurer->best_ct[search_task->workload_key] > early_stopping &&
-          measurer->has_valid.count(search_task->workload_key)) {
-        StdCout(verbose) << "Stop early since no performance improvement in the last "
-                         << early_stopping << " measurements trials.\n";
-        break;
-      }
-
-      // Update measured states throughputs. These states will join the EvolutionarySearch in later
-      // search rounds.
-      for (const auto& res : results) {
-        measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+      step++;
+      if (step % 25 == 0){
+        StdCout(verbose) << "Explore step " << step << "\n";
       }
     }
     PrintTitle("Done", verbose);
@@ -357,10 +356,13 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     //   *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
     // }
   }
+  else{
+    for (auto s : *next_states){
+      init_population.push_back(s);
+    }
+  }
 
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population);
-
-
   return NodeMove(neighbour_table, next_states);
 }
 
