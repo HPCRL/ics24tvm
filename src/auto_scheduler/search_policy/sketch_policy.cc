@@ -178,9 +178,13 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
     Array<State> local_min_best_states;
+
+    bool firsttime_random = true;
     
     while (ct < n_trials) {
-      local_min_best_states = SearchOneRoundPruePredict(0, &random_states);
+      // create new predict based search
+      local_min_best_states = SearchOneRoundPruePredict(0, &random_states, firsttime_random);
+      firsttime_random = false;
       local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
       inputs = PackState(best_states, n_trials - ct);
 
@@ -297,34 +301,67 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
 }
 
-Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* random_states) {
-  // Get parameters
-  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
-  int num_use_measured = std::min(
-      static_cast<int>(measured_states_vector_.size()),
-      static_cast<int>(
-          GetDoubleParam(params, SketchParamKey::SampleInitPopulation::use_measured_ratio) *
-          population));
+Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states){
+  Array<Array<State>> neighbour_table;
+  return neighbour_table;
+}
 
+Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states){
+  Array<State> local_min;
+  for (auto path : neighbour_table){
+    std::vector<float> pop_scores;
+    pop_scores.reserve(path.size());
+    path = search_task->compute_dag.InferBound(path);
+    PruneInvalidState(search_task, &path);
+    program_cost_model->Predict(search_task, path, &pop_scores);
+
+    float base_score = pop_scores[0];
+    float best_score = base_score;
+    int best_neighbour_index = 0;
+    for (int i = 1; i < pop_scores.size(); i++){
+      if (pop_scores[i] > best_score){ //Yufan: should we add epsilon threshold
+        best_neighbour_index = i;
+        best_score = pop_scores[i];
+      }
+    }
+    if (best_neighbour_index == 0){
+      local_min.push_back(path[0]);     // send out local_min to measure
+    }
+    else{
+      next_states->push_back(path[best_neighbour_index]);   // move to better predict neighbour 
+    }
+
+  }
+  return local_min;
+}
+
+Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
   // 1. Generate sketches
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
   }
+  Array<State> init_population;
+  if (firsttime_random){
+    // 2. Sample the init population
+    init_population = SampleInitPopulation(sketch_cache_);
 
-  // 2. Sample the init population
-  Array<State> init_population = SampleInitPopulation(sketch_cache_);
+    // 3. Perform evolutionary search.
+    // Also insert already measured good states to the initial population
+    std::vector<int> indices = Argsort(measured_states_throughputs_);
+    for (int i = 0; i < num_random_states; i++) {
+      init_population.push_back(measured_states_vector_[indices[i]]);
+    }
 
-  // 3. Perform evolutionary search.
-  // Also insert already measured good states to the initial population
-  std::vector<int> indices = Argsort(measured_states_throughputs_);
-  for (int i = 0; i < num_use_measured; i++) {
-    init_population.push_back(measured_states_vector_[indices[i]]);
+    // Yufan :: think about prue random??
+    // if (num_random_states > 0 && random_states != nullptr) {
+    //   *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
+    // }
   }
-  // Sample some random states for eps-greedy
-  if (num_random_states > 0 && random_states != nullptr) {
-    *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
-  }
-  return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
+
+  Array<Array<State>> neighbour_table = GenerateNeighbours(init_population);
+
+
+  return NodeMove(neighbour_table, next_states);
 }
 
 

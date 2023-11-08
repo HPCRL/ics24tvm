@@ -152,7 +152,11 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* random_states = nullptr);
+  Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states = nullptr, bool firsttime_random = false);
+
+  Array<Array<State>> GenerateNeighbours(Array<State> states);
+
+  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
 
   /*!
    * \brief Pick states from best states and random states with eps-greedy policy.
