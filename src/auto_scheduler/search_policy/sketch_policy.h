@@ -131,7 +131,10 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> SampleInitPopulation(const Array<State>& sketches);
 
-  std::vector<splitMeta*> GenerateSplitMeta(SketchPolicyNode* policy, State* state);
+  std::vector<splitMeta*> GenerateSplitMeta(SketchPolicyNode* policy, State state);
+
+  std::string state_to_string(const State& state, std::vector<splitMeta*> v_splitMeta_info, const SearchTask& task);
+
   std::unordered_map<int, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
                                 std::vector<splitMeta*> v_splitMeta_info);
 
@@ -162,6 +165,10 @@ class SketchPolicyNode : public SearchPolicyNode {
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors);
 
   Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
+  
+  Array<State> GetDirectNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors);
+  
+  Array<State> GetDiagonalNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors);
 
   /*!
    * \brief Pick states from best states and random states with eps-greedy policy.

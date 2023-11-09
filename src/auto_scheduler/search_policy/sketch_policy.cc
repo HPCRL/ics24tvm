@@ -41,6 +41,9 @@
 #include <utility>
 #include <vector>
 
+#include <tvm/te/operation.h>
+#include <tvm/te/schedule_pass.h>
+
 #include "sketch_policy_rules.h"
 #include "sketch_analysis.h"
 #include <assert.h>
@@ -159,36 +162,21 @@ SketchPolicy::SketchPolicy(SearchTask task, CostModel program_cost_model,
   data_ = std::move(node);
 }
 
-std::vector<splitMeta*> SketchPolicyNode::GenerateSplitMeta(SketchPolicyNode* policy, State* state){
-  // std::cout << "------ Enter  GenerateUniquetable ----- " << std::endl;
-  // std::cout << "dag  ----- \n" << policy->search_task->compute_dag << std::endl;
-  // std::cout << "Yufan ::  init_state"
-  //           << policy->search_task->compute_dag->access_analyzer << std::endl;
-
-  const State& init_state = policy->search_task->compute_dag->init_state;
-  // for (auto stg : (init_state)->stages) {
-  //   std::cout << stg << std::endl;
-  //   int i = 0;
-  //   for (auto itr : stg->iters) {
-  //     std::cout << i << "  " << itr->name << "  ";
-  //     i++;
-  //   }
-  //   std::cout << std::endl;
-  // }
-  // std::cout << "current state " << *state << std::endl;
-
+std::vector<splitMeta*> SketchPolicyNode::GenerateSplitMeta(SketchPolicyNode* policy, State state){
+  // const State& init_state = task->compute_dag->init_state;
+ 
   // Extract all SplitStep
   // We need to adjust stage id of split_step since new added stages (cache read, write) changes the
   // id.
   std::map<int, int> split_step_ids_stage_id_shift_map;
   // reverse traverse
   int shift = 0;
-  for (size_t i = (*state)->transform_steps.size() - 1; i > 0; i--) {
-    if ((*state)->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
-        (*state)->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
+  for (size_t i = state->transform_steps.size() - 1; i > 0; i--) {
+    if (state->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
+        state->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
       shift += 1;
     }
-    if (auto ps = (*state)->transform_steps[i].as<SplitStepNode>()) {
+    if (auto ps = state->transform_steps[i].as<SplitStepNode>()) {
       if (!ps->extent.defined() || !ps->extent.value()->IsInstance<IntImmNode>()) {
         continue;
       }
@@ -206,10 +194,10 @@ std::vector<splitMeta*> SketchPolicyNode::GenerateSplitMeta(SketchPolicyNode* po
   for (auto itr = split_step_ids_stage_id_shift_map.cbegin();
        itr != split_step_ids_stage_id_shift_map.cend();) {
     int step_id = itr->first;
-    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    auto ps = state->transform_steps[step_id].as<SplitStepNode>();
     int orgin_stage_id = ps->stage_id;
     int adjust_stage_id = orgin_stage_id + itr->second;
-    auto stg = (*state)->stages[adjust_stage_id];
+    auto stg = state->stages[adjust_stage_id];
 
     if (stg->op->name.find("shared") != std::string::npos) {
       // save remove CHR stage splitnode
@@ -254,7 +242,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       firsttime_random = false;
       if (!local_min_best_states.empty()){
         local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
-        inputs = PackState(best_states, n_trials - ct);
+        inputs = PackState(local_min_best_states, n_trials - ct);
 
         // Currently it's hard to detect if all of the search space has been traversed
         // Stop if no extra valid states found in several retries
@@ -275,7 +263,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         PrintTitle("Measure", verbose);
         results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
         ct += inputs.size();
-
         
         // Update measured states throughputs. These states will join the EvolutionarySearch in later
         // search rounds.
@@ -367,23 +354,69 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
 }
 
+
+/* Generate diagnal neighbor states for state
+*  @param states: base states
+*  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
+*  @return: neighbors states table
+*/
+Array<State> SketchPolicyNode::GetDiagonalNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors){
+  // per state extract tile size vector
+  // <G, T, R, ...  
+  Array<State> neighbors;
+  neighbors.push_back(state);
+  return neighbors;
+}
+
+/* Generate direct neighbors states for state
+*  @param states: base states
+*  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
+*  @return: neighbors states table
+*/
+Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors){
+  // per state extract tile size vector
+  // <G, T, R, ...
+  Array<State> neighbors;
+  neighbors.push_back(state);
+  return neighbors;
+}
+
+/* Generate neighbors states for all base states
+*  @param states: base states
+*  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
+*  @return: neighbors states table
+*/
 Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors){
   Array<Array<State>> neighbour_table;
 
+  for (const auto& state : states) {
+    Array<State> neighbors;
+    // insert the base state
+    neighbors.push_back(state);
 
- // problem size --> 6 factor[1, 2, 3, 6]
+    // get direct neighbors
+    Array<State> direct_neighbors = GetDirectNeighbors(state, pz_factors);
+    for (auto n : direct_neighbors){
+      neighbors.push_back(n);
+    }
 
-  // per state extract tile size vector
-    // <G, T, R, ...
-  
-  // direct neighbour
+    // get diagnal neighbors
+    Array<State> diagonal_neighbors = GetDiagonalNeighbors(state, pz_factors);
+    for (auto n : diagonal_neighbors){
+      neighbors.push_back(n);
+    }
+    neighbour_table.push_back(neighbors);
+  }
 
-  // diagnol neighbour
-
-    
   return neighbour_table;
 }
 
+
+/* decide move
+*  @param neighbour_table: base state with its neighbours
+*  @param next: next states
+*  @return: local mins and next states
+*/
 Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states){
   Array<State> local_min;
   for (auto path : neighbour_table){
@@ -393,6 +426,9 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     PruneInvalidState(search_task, &path);
     program_cost_model->Predict(search_task, path, &pop_scores);
 
+    // Determine if the neighbor should be a local minimum
+    // path[0] : base state
+    // path[1:] : neighbour states
     float base_score = pop_scores[0];
     float best_score = base_score;
     int best_neighbour_index = 0;
@@ -402,6 +438,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
         best_score = pop_scores[i];
       }
     }
+    // local min or not
     if (best_neighbour_index == 0){
       local_min.push_back(path[0]);     // send out local_min to measure
     }
@@ -479,11 +516,47 @@ std::unordered_map<int, std::vector<int>>  SketchPolicyNode::GetFactorInfo(Sketc
   // int idx = 0;
   // int depth = i;
   // std::vector<Array<Integer>> current_config;
+
+  // get factor list for each dimension using GetFactorizationSchemes
+  
+  int idx = 0;
+  // get factor list for each dimension
+  for (auto sm : v_splitMeta_info){
+    if (sm->parallel) {
+      // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 2, max_innermost_split_factor);
+      auto fact_schem = sfm.GetFactors(sm->problem_size);
+      std::cout << "fact_schem size " << fact_schem.size() << std::endl;
+      for (auto f : fact_schem){
+        std::cout << f << " ";
+      }
+      std::vector<int> v_fact_schem;
+      for (auto f : fact_schem){
+        v_fact_schem.push_back(f);
+      }
+      res[idx] = v_fact_schem;
+    }
+    else{
+      // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 1, max_innermost_split_factor);
+      auto fact_schem = sfm.GetFactors(sm->problem_size);
+      std::cout << "fact_schem size " << fact_schem.size() << std::endl;
+      for (auto f : fact_schem){
+        std::cout << f << " ";
+      }
+      std::vector<int> v_fact_schem;
+      for (auto f : fact_schem){
+        v_fact_schem.push_back(f);
+      }
+      res[idx] = v_fact_schem;
+    }
+    idx++;
+  }
+
   return res;
 }
 
 
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
+  PrintTitle("Search", verbose);
   // 1. Generate sketches
   std::vector<splitMeta*> v_splitMeta_info;
   std::unordered_map<int, std::vector<int>> pz_factors;
@@ -491,27 +564,42 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     sketch_cache_ = GenerateSketches();
     assert(sketch_cache_.size() == 1);
     State state = sketch_cache_[0];
-    v_splitMeta_info = GenerateSplitMeta(this, &state);
+    v_splitMeta_info = GenerateSplitMeta(this, state);
 
-    for (auto info : v_splitMeta_info){
-      std::cout << "info = " << info << std::endl;
-    }
+    // for (auto info : v_splitMeta_info){
+    //   std::cout << "info = " << info << std::endl;
+    // }
+    // get factor list for each dimension
     pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   }
+
+  std::cout << "pz_factors size " << pz_factors.size() << std::endl;
+  //print out the pz_factors for each dimension
+  for (auto factor : pz_factors){
+    std::cout << "dim idx " << factor.first << " : ";
+    for (auto f : factor.second){
+      std::cout << f << " ";
+    }
+    std::cout << std::endl;
+  }
   
+  PrintTitle("Generate Base States", verbose);
+  // TODO(Chendi): just use next_states.empty() to check if we need to re-sample init population
+  // base states in the init population
   Array<State> init_population;
   if (firsttime_random){
     // 2. Sample the init population
     init_population = SampleInitPopulation(sketch_cache_);
+    std::cout << "init_population size " << init_population.size() << std::endl;
 
-    // 3. Perform evolutionary search.
-    // Also insert already measured good states to the initial population
-    std::vector<int> indices = Argsort(measured_states_throughputs_);
-    for (int i = 0; i < num_random_states; i++) {
-      init_population.push_back(measured_states_vector_[indices[i]]);
-    }
+    // Chendi: we should use the measured states with the highest throughput in dynamic model
+    //         But for neighbor search, all measured states are local minimums, so just skip it for now.
+    // std::vector<int> indices = Argsort(measured_states_throughputs_);
+    // for (int i = 0; i < num_random_states; i++) {
+    //   init_population.push_back(measured_states_vector_[indices[i]]);
+    // }
 
-    
+    // TODO: (Chendi) Need to sample more random states to avoid local minimums
 
     // Yufan :: think about prue random??
     // if (num_random_states > 0 && random_states != nullptr) {
@@ -519,12 +607,22 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     // }
   }
   else{
-    for (auto s : *next_states){
-      init_population.push_back(s);
+    if (next_states->size() == 0){// size of next_states is 0
+      PrintTitle("Next States is empty, sample more states", verbose);
+      init_population = SampleInitPopulation(sketch_cache_);
+    }
+    else{// size of next_states is not 0
+      std::cout << "next_states size " << next_states->size() << std::endl;
+      for (auto s : *next_states){
+        init_population.push_back(s);
+      }
     }
   }
 
+  PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors);
+
+  PrintTitle("Node Move", verbose);
   return NodeMove(neighbour_table, next_states);
 }
 
@@ -601,7 +699,8 @@ Array<State> SketchPolicyNode::GenerateSketches() {
 
 Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
   // Use this population as the parallel degree to do sampling
-  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  // int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  int population = 10240;
 
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
@@ -620,6 +719,7 @@ Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches
     std::vector<State> temp_states(population);
 
     // Sample a batch of states randomly
+    // TODO(Chendi): apply capacity prune here
     support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens](int index) {
       // Randomly choose a sketch
       State tmp_s = sketches[(rand_gens[index])() % sketches.size()];
@@ -659,7 +759,9 @@ Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches
       program_cost_model->Predict(search_task, cand_states, &pop_scores);
 
       for (size_t i = 0; i < cand_states.size(); i++) {
-        const auto state_str = cand_states[i].ToStr();
+        std::vector<splitMeta*> v_splitMeta_info;
+        v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
+        const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
         if (pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0) {
           explored_state_strs.insert(state_str);
           out_states.push_back(std::move(cand_states[i]));
@@ -711,7 +813,7 @@ Array<State> SketchPolicyNode::EvolutionarySearch(const Array<State>& init_popul
   double mutation_prob = GetDoubleParam(params, SketchParamKey::EvolutionarySearch::mutation_prob);
   int num_iters = GetIntParam(params, SketchParamKey::EvolutionarySearch::num_iters);
 
-  bool is_cost_model_reasonable = !program_cost_model->IsInstance<RandomModelNode>();
+  // bool is_cost_model_reasonable = !program_cost_model->IsInstance<RandomModelNode>();
   // if (!is_cost_model_reasonable && num_iters > 2) {
   //   num_iters = 2;
   //   StdCout(verbose) << "GA iteration number has been adjusted to " << num_iters
@@ -900,9 +1002,164 @@ Array<MeasureInput> SketchPolicyNode::PickStatesWithEpsGreedy(const Array<State>
   return inputs;
 }
 
-Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
-                                                              int remaining_n_trials) {
 
+/* convert state to string using tiling size and split meta info
+*  @param state : state to be converted
+*  @return : string
+*/
+std::string SketchPolicyNode::state_to_string(const State& state, std::vector<splitMeta*> v_splitMeta_info, const SearchTask& task){
+  State ret_state;
+  StateNode* pstate;
+
+  if (state->stages.empty()) {
+    // If the input state is incomplete with empty operation stage
+    // create a new state from init_state and update it first
+    ret_state = task->compute_dag->init_state;
+    pstate = ret_state.CopyOnWrite();
+    pstate->transform_steps = state->transform_steps;
+    for (const auto& step : pstate->transform_steps) {
+      StepApplyToState(step, &ret_state, task->compute_dag);
+    }
+  } else {
+    ret_state = state;
+    pstate = ret_state.CopyOnWrite();
+  }
+
+  Array<te::Stage> stages;
+  StageToAxesMap stage_to_axes;
+  te::Schedule sch;
+  Array<te::Tensor> tensors;
+  // Replay steps to tvm::Schedule
+  std::tie(sch, tensors) = task->compute_dag.ApplySteps(pstate->transform_steps, &stages, &stage_to_axes);
+  sch = sch.normalize_for_feature_extraction();
+  // Get bound information from TVM schedule
+  Map<IterVar, Range> bounds = te::InferBound(sch);
+
+  // Update the state bound information
+  for (size_t i = 0; i < pstate->stages.size(); ++i) {
+    const Stage& stage = pstate->stages[i];
+
+    if (stage->compute_at == ComputeAtKind::kInlined) {
+      continue;
+    }
+
+    Array<Iterator> new_iters;
+    new_iters.reserve(stage->iters.size());
+    // Get bound information from schedule
+    // the StageToAxesMap is used to find the corresponding IterVar in TVM schedule result
+    for (size_t j = 0; j < stage->iters.size(); ++j) {
+      const Iterator& iter = stage->iters[j];
+      const IterVar& axis = stage_to_axes.at(stages[i])[j];
+
+      auto find_res = bounds.find(axis);
+      if (find_res != bounds.end()) {
+        new_iters.push_back(Iterator(iter->name, (*find_res).second, iter->iter_kind,
+                                     iter->annotation, &iter->orig_iters));
+      } else {
+        LOG(FATAL) << "Infer bound fails";
+      }
+    }
+
+    pstate->stages.Set(
+        i, Stage(stage->op, stage->op_type, new_iters, stage->compute_at, stage->attrs));
+  }
+  const State& init_state = task->compute_dag->init_state;
+  std::map<int, int> stage_itr_offset;
+
+  for (auto spm : v_splitMeta_info) {
+    int step_id = spm->step_id;
+    // // std::cout << "v_splitMeta_info step_id " << step_id  << std::endl;
+    auto ps = (state)->transform_steps[step_id].as<SplitStepNode>();
+    int orgin_stage_id = ps->stage_id;
+    auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
+    // restore iterator id according to transform steps
+    if (stage_itr_offset.find(orgin_stage_id) != stage_itr_offset.end()) {
+      // accumulate the previous split
+      int offset = stage_itr_offset[orgin_stage_id];
+      spm->origin_itr = ori_iters[ps->iter_id - offset];
+
+      // Fetch the current tile sizes.
+      std::vector<int> lengths(ps->lengths.size() + 1, 1);
+      for (int i = 0; i < static_cast<int>(ps->lengths.size()); ++i) {
+        lengths[i + 1] = GetIntImm(ps->lengths[i].value());
+      }
+      lengths[0] = spm->problem_size / ElementProduct(lengths);
+      for (auto elm : lengths) {
+        spm->add_tilesize(elm);
+      }
+      stage_itr_offset[orgin_stage_id] += ps->lengths.size();
+      if (lengths.size() == 5) {
+        spm->parallel = true;
+      } else if (lengths.size() == 3) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    } else {
+      // first one in the stage
+      spm->origin_itr = ori_iters[ps->iter_id];
+      // Fetch the current tile sizes.
+      std::vector<int> lengths(ps->lengths.size() + 1, 1);
+      for (int i = 0; i < static_cast<int>(ps->lengths.size()); ++i) {
+        lengths[i + 1] = GetIntImm(ps->lengths[i].value());
+      }
+      lengths[0] = spm->problem_size / ElementProduct(lengths);
+      for (auto elm : lengths) {
+        spm->add_tilesize(elm);
+      }
+      stage_itr_offset[orgin_stage_id] = ps->lengths.size();
+      if (lengths.size() == 5) {
+        spm->parallel = true;
+      } else if (lengths.size() == 3) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    }
+  }
+  // std::cout << "------ Enter  state_to_string ----- " << std::endl;
+  // if (v_splitMeta_info.empty()) {
+  //   std::cout << "v_splitMeta_info is empty" << std::endl;
+  // }
+  // else{
+  //   std::cout << "v_splitMeta_info is not empty" << std::endl;
+  // }
+  // for (auto spm : v_splitMeta_info) {
+  //   std::cout << *spm << std::endl;
+  // }
+  std::string res = "";
+  for (auto spm : v_splitMeta_info) {
+    if (spm->parallel == 1) {
+
+      int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
+      int tb = spm->tile_sizes[2];
+      int grid = spm->tile_sizes[0];
+      // std::cout << "reg = " << reg << " tb = " << tb << " grid = " << grid << std::endl;
+      
+      // append name+Grid+TB+reg
+      res += spm->origin_itr->name + "_Grid" + std::to_string(grid) + "_TB" + std::to_string(tb) + "_reg" + std::to_string(reg);
+
+    } else {
+      int outer_SM = spm->tile_sizes[0];
+      int inner_outer = spm->tile_sizes[1];
+      int inner_inner = spm->tile_sizes[2];
+      // std::cout << "outer_SM = " << outer_SM << " inner_outer = " << inner_outer << " inner_inner = " << inner_inner << std::endl;
+      
+      res += spm->origin_itr->name + "_outer_SM" + std::to_string(outer_SM) + "_inner_outer" + std::to_string(inner_outer) + "_inner_inner" + std::to_string(inner_inner);
+    }
+    if (spm == v_splitMeta_info.end()[-1]) {
+      continue;
+    }
+  }
+  // std::cout << "res = " << res << std::endl;
+  return res;
+}
+
+/* Pack state into MeasureInput
+*  @param best_states: states waiting to be measured
+*  @return: MeasureInput
+*/
+Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states, int remaining_n_trials) {
   Array<MeasureInput> inputs;
   size_t offset_best_upperbound = 0;
   size_t offset_best = 0;
@@ -919,7 +1176,11 @@ Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
     State state;
     state = best_states[offset_best++];
     // Check if it has already been measured
-    std::string state_str = state.ToStr();
+
+    // std::string state_str = state.ToStr();
+    std::vector<splitMeta*> v_splitMeta_info;
+    v_splitMeta_info = GenerateSplitMeta(this, state);
+    std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
     if (!measured_states_set_.count(state_str)) {
       measured_states_set_.insert(std::move(state_str));
       measured_states_vector_.push_back(state);
@@ -928,9 +1189,6 @@ Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
   }
   return inputs;
 }
-
-
-
 
 /********** PreloadCustomSketchRule **********/
 TVM_REGISTER_OBJECT_TYPE(PreloadCustomSketchRuleNode);
