@@ -43,6 +43,7 @@
 #include <utility>
 #include <vector>
 
+#include <tvm/auto_scheduler/feature.h>
 #include "sketch_policy_rules.h"
 #include "utils.h"
 
@@ -130,6 +131,10 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> SampleInitPopulation(const Array<State>& sketches);
 
+  std::vector<splitMeta*> GenerateSplitMeta(SketchPolicyNode* policy, State* state);
+  std::unordered_map<int, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
+                                std::vector<splitMeta*> v_splitMeta_info);
+
   /*!
    * \brief Perform evolutionary search.
    * \param init_populations The states generated from init population.
@@ -154,7 +159,7 @@ class SketchPolicyNode : public SearchPolicyNode {
 
   Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states = nullptr, bool firsttime_random = false);
 
-  Array<Array<State>> GenerateNeighbours(Array<State> states);
+  Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors);
 
   Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
 

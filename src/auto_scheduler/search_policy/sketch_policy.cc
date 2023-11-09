@@ -43,6 +43,8 @@
 
 #include "sketch_policy_rules.h"
 #include "sketch_analysis.h"
+#include <assert.h>
+
 
 namespace tvm {
 namespace auto_scheduler {
@@ -155,6 +157,71 @@ SketchPolicy::SketchPolicy(SearchTask task, CostModel program_cost_model,
   }
 
   data_ = std::move(node);
+}
+
+std::vector<splitMeta*> SketchPolicyNode::GenerateSplitMeta(SketchPolicyNode* policy, State* state){
+  // std::cout << "------ Enter  GenerateUniquetable ----- " << std::endl;
+  // std::cout << "dag  ----- \n" << policy->search_task->compute_dag << std::endl;
+  // std::cout << "Yufan ::  init_state"
+  //           << policy->search_task->compute_dag->access_analyzer << std::endl;
+
+  const State& init_state = policy->search_task->compute_dag->init_state;
+  // for (auto stg : (init_state)->stages) {
+  //   std::cout << stg << std::endl;
+  //   int i = 0;
+  //   for (auto itr : stg->iters) {
+  //     std::cout << i << "  " << itr->name << "  ";
+  //     i++;
+  //   }
+  //   std::cout << std::endl;
+  // }
+  // std::cout << "current state " << *state << std::endl;
+
+  // Extract all SplitStep
+  // We need to adjust stage id of split_step since new added stages (cache read, write) changes the
+  // id.
+  std::map<int, int> split_step_ids_stage_id_shift_map;
+  // reverse traverse
+  int shift = 0;
+  for (size_t i = (*state)->transform_steps.size() - 1; i > 0; i--) {
+    if ((*state)->transform_steps[i].as<CacheWriteStepNode>() != nullptr ||
+        (*state)->transform_steps[i].as<CacheReadStepNode>() != nullptr) {
+      shift += 1;
+    }
+    if (auto ps = (*state)->transform_steps[i].as<SplitStepNode>()) {
+      if (!ps->extent.defined() || !ps->extent.value()->IsInstance<IntImmNode>()) {
+        continue;
+      }
+      split_step_ids_stage_id_shift_map[i] = shift;
+    }
+  }
+  std::vector<splitMeta*> v_splitMeta_info;
+
+  // No split node; No tile size could be changes.
+  if (split_step_ids_stage_id_shift_map.empty()) {
+    return v_splitMeta_info;
+  }
+
+  
+  for (auto itr = split_step_ids_stage_id_shift_map.cbegin();
+       itr != split_step_ids_stage_id_shift_map.cend();) {
+    int step_id = itr->first;
+    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    int orgin_stage_id = ps->stage_id;
+    int adjust_stage_id = orgin_stage_id + itr->second;
+    auto stg = (*state)->stages[adjust_stage_id];
+
+    if (stg->op->name.find("shared") != std::string::npos) {
+      // save remove CHR stage splitnode
+      split_step_ids_stage_id_shift_map.erase(itr++);
+    } else {
+      int extent = GetIntImm(ps->extent.value());
+      splitMeta* spm = new splitMeta(step_id, adjust_stage_id, extent, ps->lengths.size() + 1);
+      v_splitMeta_info.push_back(spm);
+      ++itr;
+    }
+  }
+  return v_splitMeta_info;
 }
 
 State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure_per_iter,
@@ -300,8 +367,20 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
 }
 
-Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states){
+Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors){
   Array<Array<State>> neighbour_table;
+
+
+ // problem size --> 6 factor[1, 2, 3, 6]
+
+  // per state extract tile size vector
+    // <G, T, R, ...
+  
+  // direct neighbour
+
+  // diagnol neighbour
+
+    
   return neighbour_table;
 }
 
@@ -334,11 +413,92 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
   return local_min;
 }
 
+std::unordered_map<int, std::vector<int>>  SketchPolicyNode::GetFactorInfo(SketchPolicyNode* policy, State* state, std::vector<splitMeta*> v_splitMeta_info){
+  std::unordered_map<int, std::vector<int>> res;
+  const State& init_state = policy->search_task->compute_dag->init_state;
+  std::map<int, int> stage_itr_offset;
+
+  for (auto spm : v_splitMeta_info) {
+    int step_id = spm->step_id;
+    // std::cout << "v_splitMeta_info step_id " << step_id  << std::endl;
+    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    int orgin_stage_id = ps->stage_id;
+    auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
+    // restore iterator id according to transform steps
+    if (stage_itr_offset.find(orgin_stage_id) != stage_itr_offset.end()) {
+      // accumulate the previous split
+      int offset = stage_itr_offset[orgin_stage_id];
+      spm->origin_itr = ori_iters[ps->iter_id - offset];
+
+      
+      stage_itr_offset[orgin_stage_id] += ps->lengths.size();
+      if (ps->lengths.size() == 4) {
+        spm->parallel = true;
+      } else if (ps->lengths.size() == 2) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    } else {
+      // first one in the stage
+      spm->origin_itr = ori_iters[ps->iter_id];
+      // Fetch the current tile sizes.
+      stage_itr_offset[orgin_stage_id] = ps->lengths.size();
+      if (ps->lengths.size() == 4) {
+        spm->parallel = true;
+      } else if (ps->lengths.size() == 2) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    }
+  }
+
+  std::cout << "Done itr id adjust " << v_splitMeta_info.size() << std::endl;
+  SplitFactorizationMemo sfm;
+  int max_innermost_split_factor =
+      GetIntParam(policy->params, SketchParamKey::max_innermost_split_factor);
+
+  // int tiling_level = 2;
+  // std::unordered_map<int, Array<Array<Integer>>> full_factor_list;
+  // int i = 0;
+  // for (auto sm : v_splitMeta_info){
+  //   if (sm->parallel) {
+  //     auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
+  //     full_factor_list[i] = fact_schem;
+  //     i++;
+  //   } else {
+  //     // non-parallel
+  //     tiling_level = 1;
+  //     auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
+  //     full_factor_list[i] = fact_schem;
+  //     i++;
+  //   }
+  // }
+
+  // int idx = 0;
+  // int depth = i;
+  // std::vector<Array<Integer>> current_config;
+  return res;
+}
+
+
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
   // 1. Generate sketches
+  std::vector<splitMeta*> v_splitMeta_info;
+  std::unordered_map<int, std::vector<int>> pz_factors;
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
+    assert(sketch_cache_.size() == 1);
+    State state = sketch_cache_[0];
+    v_splitMeta_info = GenerateSplitMeta(this, &state);
+
+    for (auto info : v_splitMeta_info){
+      std::cout << "info = " << info << std::endl;
+    }
+    pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   }
+  
   Array<State> init_population;
   if (firsttime_random){
     // 2. Sample the init population
@@ -351,6 +511,8 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
       init_population.push_back(measured_states_vector_[indices[i]]);
     }
 
+    
+
     // Yufan :: think about prue random??
     // if (num_random_states > 0 && random_states != nullptr) {
     //   *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
@@ -362,7 +524,7 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     }
   }
 
-  Array<Array<State>> neighbour_table = GenerateNeighbours(init_population);
+  Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors);
   return NodeMove(neighbour_table, next_states);
 }
 
