@@ -230,9 +230,22 @@ class XGBModel(PythonBasedModel):
             The predicted scores for all states
         """
         features = get_per_store_features_from_states(states, task)
-        if self.bst is not None and len(self.inputs) > self.num_warmup_sample:
+
+        # get TVM_HOME environment variable
+        import os
+        tvm_home = os.environ.get("TVM_HOME")
+        if tvm_home is None:
+            raise RuntimeError("TVM_HOME environment variable is not set")
+        else:
+            model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "model.json")
+
+        bst = xgb.Booster()
+        bst.load_model(model_file)
+
+        if bst is not None and len(features) > self.num_warmup_sample:
             dtest, pack_ids = feature_to_pack_sum_xgbmatrix(features)
-            raw_preds = self.bst.predict(dtest)
+
+            raw_preds = bst.predict(dtest)
             ret = predict_throughput_pack_sum(raw_preds, pack_ids)
         else:
             ret = np.random.uniform(0, 1, (len(states),))
@@ -365,7 +378,8 @@ def feature_to_pack_sum_xgbmatrix(xs):
             x_flatten.append(row)
             pack_ids.append(ct)
 
-    return xgb.DMatrix(np.array(x_flatten)), pack_ids
+    feature_names = ['wave_efficiency', 'est_occupancy', 'ILP', 'WLP', 'Concurrent_estimate', 'totalReuse', 'OI_Global']
+    return xgb.DMatrix(np.array(x_flatten), feature_names=feature_names), pack_ids
 
 
 def pack_sum_xgbmatrix(xs, ys, gids=None, weights=None):
