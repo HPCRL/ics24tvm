@@ -2424,8 +2424,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Global);
   
   // std::cout << "---Feature---" << std::endl;
+  // std::cout << "thread_block_size " << thread_block_size << std::endl;
   // std::cout << "global_trans " << global_trans << std::endl;
-
   // std::cout << "wave_efficiency " << wave_efficiency << std::endl;
   // std::cout << "est_occupancy " << est_occupancy << std::endl;
   // std::cout << "ILP " << ILP << std::endl;
@@ -2672,7 +2672,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     feature->clear();
     feature->push_back(1);
     for (auto fea: features_extracted){
-      // std::cout << "fea " << fea << std::endl;
+      //std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
       feature->push_back(fea);
     }
     // std::cout << "feature size : " << feature->size() << std::endl;

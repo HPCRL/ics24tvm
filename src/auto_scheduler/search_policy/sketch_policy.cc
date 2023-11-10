@@ -239,7 +239,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     int step = 0;
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
+      local_min_best_states = SearchOneRoundPruePredict(1, &next_states, firsttime_random);
       if (next_states.empty()){
         firsttime_random = true;
       }
@@ -276,10 +276,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
         }
       }
-      step++;
-      if (step % 25 == 0){
-        StdCout(verbose) << "Explore step " << step << "\n";
-      }
+     
+    }
+    step++;
+    if (step % 1 == 0){
+      StdCout(verbose) << "Explore step " << step << "\n";
     }
     PrintTitle("Done", verbose);
 
@@ -1061,7 +1062,7 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
   {
     idx_in_unique_conf_table_ = containsConfigKey(unique_conf_table_, neighbors_config_key[i]);
     if (idx_in_unique_conf_table_ != 0){
-      std::cout << "unique_conf_table_ contains neighbors_config_key[i]" << std::endl;
+      //std::cout << "unique_conf_table_ contains neighbors_config_key[i]" << std::endl;
       configs.push_back(unique_conf_table_[idx_in_unique_conf_table_]);
       for (int j = 0; j < neighbors_config_key[i].size(); j++){
         std::cout << neighbors_config_key[i][j] << " ";
@@ -1084,13 +1085,13 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
   std::cout << "conf_table size: " << conf_table.size() << std::endl;
 
 
-  for (auto c : conf_table){
-    std::cout << "conf_table: " << std::endl;
-    for (int i = 0; i < c.second.size(); i++){
-      std::cout << c.second[i] << " ";
-    }
-    std::cout << std::endl;
-  }
+  // for (auto c : conf_table){
+  //   std::cout << "conf_table: " << std::endl;
+  //   for (int i = 0; i < c.second.size(); i++){
+  //     std::cout << c.second[i] << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
 
   // // debug 
   // std::cout << "debug: --------------------- " << std::endl;
@@ -1131,14 +1132,14 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
   // unique_conf_table_ =  GenerateUniquetable(this,  state, v_splitMeta_info);
   // // unique_conf_table_[0] = {1,1,1,1,2,1};
   // // unique_conf_table_[1] = {8, 16, 32, 32, 2, 1};
-  std::cout << "debug1: --------------------- " << std::endl;
-  for (auto c : unique_conf_table_){
-    std::cout << c.first << " "; 
-    for (int i = 0; i < c.second.size(); i++){
-      std::cout << c.second[i] << " ";
-    }
-    std::cout << std::endl;
-  }
+  // std::cout << "debug1: --------------------- " << std::endl;
+  // for (auto c : unique_conf_table_){
+  //   std::cout << c.first << " "; 
+  //   for (int i = 0; i < c.second.size(); i++){
+  //     std::cout << c.second[i] << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
 
   // // random sample from unique_conf_table_
   // int random_index = rand() % unique_conf_table_.size();
@@ -1293,21 +1294,29 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states){
     int count = 0;
   Array<State> local_min;
+  int round = 0;
   for (auto path : neighbour_table){
+    if (round++ > 2){
+      break;
+    }
     if (path.empty()){
       std::cout << "path is empty" << std::endl;
       continue;
     }
     std::vector<splitMeta*> v_splitMeta_info;
     ConfigKey base = map_to_configkey(GetSateFactor(search_task, path[0]), v_splitMeta_info);
-    std::cout << "test config_table[0] after " << std::endl;
-    for (auto c : base){
-      std::cout << c << " ";
-    }
+    // std::cout << "test config_table[0] after " << std::endl;
+    // for (auto c : base){
+    //   std::cout << c << " ";
+    // }
     std::vector<float> pop_scores;
     pop_scores.reserve(path.size());
     path = search_task->compute_dag.InferBound(path);
     PruneInvalidState(search_task, &path);
+
+    std::cout << "after PruneInvalidState : " << path.size() << std::endl;
+
+
     program_cost_model->Predict(search_task, path, &pop_scores);
     std::cout << "base score : " << pop_scores[0] << std::endl;
     std::cout << "neighbor size : " << pop_scores.size() - 1 << std::endl;
@@ -1600,15 +1609,15 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
   
   int population = conf_table.size();
 
-  std::cout << "conf_table size: " << conf_table.size() << " table: " << std::endl;
-  for (auto c : conf_table){
-    std::cout << c.first << " ";
-    for (auto cc : c.second){
-      std::cout << cc << " ";
-    }
-    std::cout << std::endl;
-  }
-  std::cout << "size of the conf_table: " << population << std::endl;
+  // std::cout << "conf_table size: " << conf_table.size() << " table: " << std::endl;
+  // for (auto c : conf_table){
+  //   std::cout << c.first << " ";
+  //   for (auto cc : c.second){
+  //     std::cout << cc << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
+  // std::cout << "size of the conf_table: " << population << std::endl;
   assert(sketches.size() == 1); 
 
   State tmp_s = sketches[0]; // TODO: make muiltple sketch work later
@@ -1628,9 +1637,9 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
   std::vector<State> temp_states(population);
 
   std::vector<int> split_id;
-  std::cout<< "SampleUniquePopulation function---> uniq pop" << population << std::endl;
+  //std::cout<< "SampleUniquePopulation function---> uniq pop" << population << std::endl;
   for (auto sm : v_splitMeta_info){
-    std::cout << *sm << std::endl;
+    //std::cout << *sm << std::endl;
     split_id.push_back(sm->step_id);
   }
   // support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
@@ -1647,10 +1656,10 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
 
 
     ConfigKey tile_config = conf_table[index];
-    std::cout << "tile_config size: " << tile_config.size() << std::endl;
-    for (auto c : tile_config){
-      std::cout << c << " ";
-    }
+    // std::cout << "tile_config size: " << tile_config.size() << std::endl;
+    // for (auto c : tile_config){
+    //   std::cout << c << " ";
+    // }
 
     State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
     
@@ -1670,8 +1679,8 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     }
     std::cout << "done apply cust_init_rules, valid: " << valid << std::endl;
     if (valid) {
-      std::cout << "success: state move to temp_states" << std::endl;
-      std::cout << tmp_s << std::endl;
+      // std::cout << "success: state move to temp_states" << std::endl;
+      // std::cout << tmp_s << std::endl;
 
       temp_states[index] = std::move(tmp_s);
     }

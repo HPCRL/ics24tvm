@@ -539,14 +539,14 @@ PopulationGenerationRule::ResultKind InitFillTileSize::Apply(SketchPolicyNode* p
 }
 
 PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(SketchPolicyNode* policy, State* state, ConfigKey tile_config, std::vector<int> split_id) {
-  std::cout<< "InitFillTileSizeUnique::Apply_unique function---> " << std::endl;
+  ////std::cout<< "InitFillTileSizeUnique::Apply_unique function---> " << std::endl;
   StateNode* pstate = state->CopyOnWrite();
   for(int i = 0; i < tile_config.size(); i++){
-    std::cout << tile_config[i] << " ";
+    //std::cout << tile_config[i] << " ";
   }
   int i = 0;
   for (auto step_id : split_id){
-    std::cout << "step_id: " << step_id << " i " << i << std::endl;
+    ////std::cout << "step_id: " << step_id << " i " << i << std::endl;
     auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
     int conf_offset = i;
     Array<Integer> candidate_lengths;
@@ -556,33 +556,33 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
       // # th = tile_sizes[1] 
       Integer reg_tile = tile_config[conf_offset];
       Integer num_thread = tile_config[conf_offset+1];
-      std::cout << "num_thread: " << num_thread << " reg_tile: " << reg_tile << std::endl;
+      ////std::cout << "num_thread: " << num_thread << " reg_tile: " << reg_tile << std::endl;
       candidate_lengths.push_back(reg_tile);
       candidate_lengths.push_back(num_thread);
       candidate_lengths.push_back(1);
       candidate_lengths.push_back(1);
-      std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
-      for (auto len : candidate_lengths){
-        std::cout << len << " ";
-      }
+      // //std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
+      // for (auto len : candidate_lengths){
+      //   //std::cout << len << " ";
+      // }
     }
     else if (ps->lengths.size() == 2){
       // reduction loop dim
       Integer outer_r = tile_config[conf_offset];
       Integer inner_r = tile_config[conf_offset+1];
-      std::cout << "outer_r: " << outer_r << " inner_r: " << inner_r << std::endl;
+      ////std::cout << "outer_r: " << outer_r << " inner_r: " << inner_r << std::endl;
       candidate_lengths.push_back(outer_r);
       candidate_lengths.push_back(inner_r);
-      std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
-      for (auto len : candidate_lengths){
-        std::cout << len << " ";
-      }
+      // //std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
+      // for (auto len : candidate_lengths){
+      //   //std::cout << len << " ";
+      // }
     }
-    std::cout << "InitFillTileSizeUnique  " << step_id << std::endl;
-    std::cout << "InitFillTileSizeUnique  candidate_lengths" << candidate_lengths << std::endl;
-    for (auto len : candidate_lengths){
-      std::cout << len << " ";
-    }
+    // //std::cout << "InitFillTileSizeUnique  " << step_id << std::endl;
+    // //std::cout << "InitFillTileSizeUnique  candidate_lengths" << candidate_lengths << std::endl;
+    // for (auto len : candidate_lengths){
+    //   //std::cout << len << " ";
+    // }
 
     pstate->transform_steps.Set(
           step_id,
@@ -594,7 +594,7 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
     i+=2;
   }
   pstate->concrete = true;
-  std::cout << "pstate : \n" << *state << std::endl;
+  ////std::cout << "pstate : \n" << *state << std::endl;
   return ResultKind::kValid;
 }
 
@@ -939,7 +939,7 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
       }
       const auto& vthread_it = state->fuse(stage_id, to_fuse);
       // if (GetExtent(vthread_it) > policy->search_task->hardware_params->max_vthread_extent) {
-      //   std::cout << "BOOM vtheard !! " << GetExtent(vthread_it) << " -- " << policy->search_task->hardware_params->max_vthread_extent << std::endl;
+      //   //std::cout << "BOOM vtheard !! " << GetExtent(vthread_it) << " -- " << policy->search_task->hardware_params->max_vthread_extent << std::endl;
       //   return ResultKind::kInvalid;
       // }
       state->bind(stage_id, vthread_it, IteratorAnnotation::kVThread);
@@ -958,7 +958,7 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
       const auto& threadidx_it = state->fuse(stage_id, to_fuse);
       if (check_min_thread_extent &&
           GetExtent(threadidx_it) < policy->search_task->hardware_params->warp_size) {
-        // std::cout << "BOOM threadidx_it !! " <<  GetExtent(threadidx_it) << " -- " << policy->search_task->hardware_params->warp_size << std::endl;
+        // //std::cout << "BOOM threadidx_it !! " <<  GetExtent(threadidx_it) << " -- " << policy->search_task->hardware_params->warp_size << std::endl;
         return ResultKind::kInvalid;
       }
       state->bind(stage_id, threadidx_it, IteratorAnnotation::kThreadX);
