@@ -66,6 +66,7 @@ static RuleSpecialComputeLocationGPU rule_special_compute_location_gpu;
 
 /********** Init population rules **********/
 static InitFillTileSize init_fill_tile_size;
+static InitFillTileSizeUnique init_fill_tile_size_unique;
 static InitChangeComputeLocation init_change_compute_location;
 static InitParallel init_parallel;
 static InitUnroll init_unroll;
@@ -239,7 +240,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     while (ct < n_trials) {
       // create new predict based search
       local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
-      firsttime_random = false;
+      if (next_states.empty()){
+        firsttime_random = true;
+      }
+      else{
+        firsttime_random = false;
+      }
       if (!local_min_best_states.empty()){
         local_min_best_states = search_task->compute_dag.InferBound(local_min_best_states);
         inputs = PackState(local_min_best_states, n_trials - ct);
@@ -354,13 +360,158 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
 }
 
+std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetSateFactor(const SearchTask& task, const State& state){
+  std::vector<splitMeta*> v_splitMeta_info;
+  v_splitMeta_info = GenerateSplitMeta(this, state);
+  State ret_state;
+  StateNode* pstate;
+
+  if (state->stages.empty()) {
+    // If the input state is incomplete with empty operation stage
+    // create a new state from init_state and update it first
+    ret_state = task->compute_dag->init_state;
+    pstate = ret_state.CopyOnWrite();
+    pstate->transform_steps = state->transform_steps;
+    for (const auto& step : pstate->transform_steps) {
+      StepApplyToState(step, &ret_state, task->compute_dag);
+    }
+  } else {
+    ret_state = state;
+    pstate = ret_state.CopyOnWrite();
+  }
+
+  Array<te::Stage> stages;
+  StageToAxesMap stage_to_axes;
+  te::Schedule sch;
+  Array<te::Tensor> tensors;
+  // Replay steps to tvm::Schedule
+  std::tie(sch, tensors) = task->compute_dag.ApplySteps(pstate->transform_steps, &stages, &stage_to_axes);
+  sch = sch.normalize_for_feature_extraction();
+  // Get bound information from TVM schedule
+  Map<IterVar, Range> bounds = te::InferBound(sch);
+
+  // Update the state bound information
+  for (size_t i = 0; i < pstate->stages.size(); ++i) {
+    const Stage& stage = pstate->stages[i];
+
+    if (stage->compute_at == ComputeAtKind::kInlined) {
+      continue;
+    }
+
+    Array<Iterator> new_iters;
+    new_iters.reserve(stage->iters.size());
+    // Get bound information from schedule
+    // the StageToAxesMap is used to find the corresponding IterVar in TVM schedule result
+    for (size_t j = 0; j < stage->iters.size(); ++j) {
+      const Iterator& iter = stage->iters[j];
+      const IterVar& axis = stage_to_axes.at(stages[i])[j];
+
+      auto find_res = bounds.find(axis);
+      if (find_res != bounds.end()) {
+        new_iters.push_back(Iterator(iter->name, (*find_res).second, iter->iter_kind,
+                                     iter->annotation, &iter->orig_iters));
+      } else {
+        LOG(FATAL) << "Infer bound fails";
+      }
+    }
+
+    pstate->stages.Set(
+        i, Stage(stage->op, stage->op_type, new_iters, stage->compute_at, stage->attrs));
+  }
+  const State& init_state = task->compute_dag->init_state;
+  std::map<int, int> stage_itr_offset;
+
+  for (auto spm : v_splitMeta_info) {
+    int step_id = spm->step_id;
+    // // std::cout << "v_splitMeta_info step_id " << step_id  << std::endl;
+    auto ps = (state)->transform_steps[step_id].as<SplitStepNode>();
+    int orgin_stage_id = ps->stage_id;
+    auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
+    // restore iterator id according to transform steps
+    if (stage_itr_offset.find(orgin_stage_id) != stage_itr_offset.end()) {
+      // accumulate the previous split
+      int offset = stage_itr_offset[orgin_stage_id];
+      spm->origin_itr = ori_iters[ps->iter_id - offset];
+
+      // Fetch the current tile sizes.
+      std::vector<int> lengths(ps->lengths.size() + 1, 1);
+      for (int i = 0; i < static_cast<int>(ps->lengths.size()); ++i) {
+        lengths[i + 1] = GetIntImm(ps->lengths[i].value());
+      }
+      lengths[0] = spm->problem_size / ElementProduct(lengths);
+      for (auto elm : lengths) {
+        spm->add_tilesize(elm);
+      }
+      stage_itr_offset[orgin_stage_id] += ps->lengths.size();
+      if (lengths.size() == 5) {
+        spm->parallel = true;
+      } else if (lengths.size() == 3) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    } else {
+      // first one in the stage
+      spm->origin_itr = ori_iters[ps->iter_id];
+      // Fetch the current tile sizes.
+      std::vector<int> lengths(ps->lengths.size() + 1, 1);
+      for (int i = 0; i < static_cast<int>(ps->lengths.size()); ++i) {
+        lengths[i + 1] = GetIntImm(ps->lengths[i].value());
+      }
+      lengths[0] = spm->problem_size / ElementProduct(lengths);
+      for (auto elm : lengths) {
+        spm->add_tilesize(elm);
+      }
+      stage_itr_offset[orgin_stage_id] = ps->lengths.size();
+      if (lengths.size() == 5) {
+        spm->parallel = true;
+      } else if (lengths.size() == 3) {
+        spm->parallel = false;
+      } else {
+        assert(false && "unknown itr type");
+      }
+    }
+  }
+  
+  // if (v_splitMeta_info.empty()) {
+  //   std::cout << "v_splitMeta_info is empty" << std::endl;
+  // }
+  // else{
+  //   std::cout << "v_splitMeta_info is not empty" << std::endl;
+  // }
+  // for (auto spm : v_splitMeta_info) {
+  //   std::cout << *spm << std::endl;
+  // }
+  
+  std::unordered_map<std::string, std::vector<int>> current_config;
+  for (auto spm : v_splitMeta_info) {
+    if (spm->parallel == 1) {
+      std::vector<int> tile_conf;
+      int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
+      int tb = spm->tile_sizes[2];
+      tile_conf.push_back(static_cast<int>(tb));
+      tile_conf.push_back(static_cast<int>(reg));
+      current_config[spm->origin_itr->name] = tile_conf;
+    } else {
+      int inner_inner = spm->tile_sizes[2];
+      std::vector<int> tile_conf;
+      tile_conf.push_back(static_cast<int>(inner_inner));
+      tile_conf.push_back(1);
+      current_config[spm->origin_itr->name] = tile_conf;
+    }
+    if (spm == v_splitMeta_info.end()[-1]) {
+      continue;
+    }
+  }
+  return current_config;
+}
 
 /* Generate diagnal neighbor states for state
 *  @param states: base states
 *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
 *  @return: neighbors states table
 */
-Array<State> SketchPolicyNode::GetDiagonalNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors){
+Array<State> SketchPolicyNode::GetDiagonalNeighbors(State state, std::unordered_map<std::string, std::vector<int>> pz_factors){
   // per state extract tile size vector
   // <G, T, R, ...  
   Array<State> neighbors;
@@ -368,16 +519,214 @@ Array<State> SketchPolicyNode::GetDiagonalNeighbors(State state, std::unordered_
   return neighbors;
 }
 
+ConfigKey map_to_configkey(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info){
+  ConfigKey config_key;
+  for (auto spm : v_splitMeta_info) {
+    if (spm->parallel == 1) {
+      std::vector<int> tile_conf = current_config[spm->origin_itr->name];
+      for (int i = 0; i < tile_conf.size(); i++){
+        config_key.push_back(tile_conf[i]);
+      }
+    } else {
+      std::vector<int> tile_conf = current_config[spm->origin_itr->name];
+      for (int i = 0; i < tile_conf.size(); i++){
+        config_key.push_back(tile_conf[i]);
+      }
+    }
+    if (spm == v_splitMeta_info.end()[-1]) {
+      continue;
+    }
+  }
+  return config_key;
+}
+
+// UpDownMutate for current_config, using pz_factors
+std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info){
+  std::vector<ConfigKey> neighbors_config_key;
+  // std::cout << "-- current_config" << std::endl;
+  for (auto c : current_config){
+    std::string key = c.first;
+    std::vector<int> value = c.second;
+    // std::cout << "key: " << key << std::endl;
+    for (int i = 0; i < value.size(); i++){
+      // std::cout << value[i] << " ";
+    }
+    // std::cout << std::endl;
+  }
+  // std::cout << "-- pz_factors" << std::endl;
+  for (auto pz_fac_each_dim : pz_factors){
+    // print key
+    // std::cout << "key: " << pz_fac_each_dim.first << std::endl;
+    for (int i = 0; i < pz_fac_each_dim.second.size(); i++){
+      // std::cout << pz_fac_each_dim.second[i] << " ";
+    }
+    // std::cout << std::endl;
+  }
+
+  //up-down mutate for tb or reg, push into the neighbors_config_key
+  // std::cout << "debug: --------------------- " << std::endl;
+  std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
+  for (auto sm : v_splitMeta_info){
+    // std::cout << "current_config: \n" << std::endl;
+    for (auto c : tmp_config){
+      std::string key = c.first;
+      std::vector<int> value = c.second;
+      // std::cout << "key: " << key << std::endl;
+      for (int i = 0; i < value.size(); i++){
+        // std::cout << value[i] << " ";
+      }
+      // std::cout << std::endl;
+    }
+    if (sm->parallel) { // mutate for this dimension and concrete tmp_config
+      auto dim_name = sm->origin_itr->name;
+      auto pz = sm->problem_size;
+      auto tb = current_config[dim_name][0];
+      auto reg = current_config[dim_name][1];
+
+      // find the index of tb and reg in pz_factors
+      auto tb_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), tb);
+      auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+
+      // up for tb
+      if (tb_index != pz_factors[dim_name].end() - 1){
+        tmp_config = current_config;
+        auto up_tb_index = tb_index + 1;
+        // std::vector<int> tmp =pz_factors[dim_name];
+        // auto up_tb = tmp.at(up_tb_index - pz_factors[dim_name].begin());
+        auto up_tb = pz_factors[dim_name].at(up_tb_index - pz_factors[dim_name].begin());
+        //valid
+        if (up_tb * reg <= pz){
+          // std::cout << "up_tb: " << up_tb << std::endl;
+          tmp_config[dim_name][0] = up_tb;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+      // down for tb
+      if (tb_index != pz_factors[dim_name].begin()){
+        tmp_config = current_config;
+        auto down_tb_index = tb_index - 1;
+        auto down_tb = pz_factors[dim_name].at(down_tb_index - pz_factors[dim_name].begin());
+        //valid
+        if (down_tb * reg <= pz){
+          // std::cout << "down_tb: " << down_tb << std::endl;
+          tmp_config[dim_name][0] = down_tb;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+
+      // up for reg
+      if (reg_index != pz_factors[dim_name].end() - 1){
+        tmp_config = current_config;
+        auto up_reg_index = reg_index + 1;
+        auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
+        //valid
+        if (up_reg * tb <= pz){
+          // std::cout << "up_reg: " << up_reg << std::endl;
+          tmp_config[dim_name][1] = up_reg;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+
+      // down for reg
+      if (reg_index != pz_factors[dim_name].begin()){
+        tmp_config = current_config;
+        auto down_reg_index = reg_index - 1;
+        auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
+        //valid
+        if (down_reg * tb <= pz){
+          // std::cout << "down_reg: " << down_reg << std::endl;
+          tmp_config[dim_name][1] = down_reg;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+    }
+    else{
+      auto dim_name = sm->origin_itr->name;
+      auto pz = sm->problem_size;
+      auto inner_inner = current_config[dim_name][0];
+      // std::cout << "inner_inner: " << inner_inner << std::endl;
+
+      auto idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+
+      // up
+      if (idx != pz_factors[dim_name].end() - 1){
+        tmp_config = current_config;
+        auto up_idx = idx + 1;
+        auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
+        //valid
+        if (up_inner_inner <= pz){
+          // std::cout << "up_inner_inner: " << up_inner_inner << std::endl;
+          tmp_config[dim_name][0] = up_inner_inner;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+      // down
+      if (idx != pz_factors[dim_name].begin()){
+        tmp_config = current_config;
+        auto down_idx = idx - 1;
+        auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
+        //valid
+        if (down_inner_inner <= pz){
+          // std::cout << "down_inner_inner: " << down_inner_inner << std::endl;
+          tmp_config[dim_name][0] = down_inner_inner;
+          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+          neighbors_config_key.push_back(config_key);
+        }
+      }
+    }
+  }
+  ConfigKey current = map_to_configkey(current_config, v_splitMeta_info);
+  // print current
+  std::cout << "current: " << std::endl;
+  for (int i = 0; i < current.size(); i++){
+    std::cout << current[i] << " ";
+  }
+  std::cout << std::endl;
+
+  // printout all neighbors_config_key  
+  for (int i = 0; i < neighbors_config_key.size(); i++){
+    // std::cout << "neighbors_config_key: " << std::endl;
+    for (int j = 0; j < neighbors_config_key[i].size(); j++){
+      // std::cout << neighbors_config_key[i][j] << " ";
+    }
+    // std::cout << std::endl;
+  }
+  // std::cout << "debug done: --------------------- " << std::endl;
+  
+  return neighbors_config_key;
+}
+
 /* Generate direct neighbors states for state
 *  @param states: base states
 *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
 *  @return: neighbors states table
 */
-Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors){
+// TODO(Chendi): reuse the code in GetSateFactor() and state_to_string()
+Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info){
   // per state extract tile size vector
   // <G, T, R, ...
+
   Array<State> neighbors;
+  std::vector<ConfigKey> neighbors_config_key;
   neighbors.push_back(state);
+  std::unordered_map<std::string, std::vector<int>> current_config = GetSateFactor(search_task, state);
+
+  // up-down for neighbors
+  neighbors_config_key = UpDownMutate(current_config, pz_factors, v_splitMeta_info);
+
+  // sample neighbors
+  std::map<int, ConfigKey> conf_table;
+  for (int i = 0; i < neighbors_config_key.size(); i++)
+  {
+    conf_table[i] = neighbors_config_key[i];
+  }
+
+  neighbors = SampleUniquePopulation(conf_table, sketches, v_splitMeta_info);
   return neighbors;
 }
 
@@ -386,22 +735,24 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
 *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
 *  @return: neighbors states table
 */
-Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors){
+Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info){
   Array<Array<State>> neighbour_table;
 
   for (const auto& state : states) {
     Array<State> neighbors;
-    // insert the base state
+    // insert the base state, fix in the first position
     neighbors.push_back(state);
 
     // get direct neighbors
-    Array<State> direct_neighbors = GetDirectNeighbors(state, pz_factors);
+    Array<State> direct_neighbors = GetDirectNeighbors(state, pz_factors, sketches, v_splitMeta_info);
+    std::cout << "direct_neighbors size: " << direct_neighbors.size() << "\n";
     for (auto n : direct_neighbors){
       neighbors.push_back(n);
     }
 
     // get diagnal neighbors
     Array<State> diagonal_neighbors = GetDiagonalNeighbors(state, pz_factors);
+    std::cout << "diagonal_neighbors size: " << diagonal_neighbors.size() << "\n";
     for (auto n : diagonal_neighbors){
       neighbors.push_back(n);
     }
@@ -450,8 +801,8 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
   return local_min;
 }
 
-std::unordered_map<int, std::vector<int>>  SketchPolicyNode::GetFactorInfo(SketchPolicyNode* policy, State* state, std::vector<splitMeta*> v_splitMeta_info){
-  std::unordered_map<int, std::vector<int>> res;
+std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorInfo(SketchPolicyNode* policy, State* state, std::vector<splitMeta*> v_splitMeta_info){
+  std::unordered_map<std::string, std::vector<int>> res;
   const State& init_state = policy->search_task->compute_dag->init_state;
   std::map<int, int> stage_itr_offset;
 
@@ -519,47 +870,46 @@ std::unordered_map<int, std::vector<int>>  SketchPolicyNode::GetFactorInfo(Sketc
 
   // get factor list for each dimension using GetFactorizationSchemes
   
-  int idx = 0;
   // get factor list for each dimension
   for (auto sm : v_splitMeta_info){
     if (sm->parallel) {
+      auto dim_name = sm->origin_itr->name;
       // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 2, max_innermost_split_factor);
       auto fact_schem = sfm.GetFactors(sm->problem_size);
-      std::cout << "fact_schem size " << fact_schem.size() << std::endl;
-      for (auto f : fact_schem){
-        std::cout << f << " ";
-      }
+      // std::cout << "fact_schem size " << fact_schem.size() << std::endl;
+      // for (auto f : fact_schem){
+      //   std::cout << f << " ";
+      // }
       std::vector<int> v_fact_schem;
       for (auto f : fact_schem){
         v_fact_schem.push_back(f);
       }
-      res[idx] = v_fact_schem;
+      res[dim_name] = v_fact_schem;
     }
     else{
+      auto dim_name = sm->origin_itr->name;
       // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 1, max_innermost_split_factor);
       auto fact_schem = sfm.GetFactors(sm->problem_size);
-      std::cout << "fact_schem size " << fact_schem.size() << std::endl;
-      for (auto f : fact_schem){
-        std::cout << f << " ";
-      }
+      // std::cout << "fact_schem size " << fact_schem.size() << std::endl;
+      // for (auto f : fact_schem){
+      //   std::cout << f << " ";
+      // }
       std::vector<int> v_fact_schem;
       for (auto f : fact_schem){
         v_fact_schem.push_back(f);
       }
-      res[idx] = v_fact_schem;
+      res[dim_name] = v_fact_schem;
     }
-    idx++;
   }
 
   return res;
 }
 
-
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
   PrintTitle("Search", verbose);
   // 1. Generate sketches
   std::vector<splitMeta*> v_splitMeta_info;
-  std::unordered_map<int, std::vector<int>> pz_factors;
+  std::unordered_map<std::string, std::vector<int>> pz_factors;
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
     assert(sketch_cache_.size() == 1);
@@ -573,15 +923,15 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   }
 
-  std::cout << "pz_factors size " << pz_factors.size() << std::endl;
-  //print out the pz_factors for each dimension
-  for (auto factor : pz_factors){
-    std::cout << "dim idx " << factor.first << " : ";
-    for (auto f : factor.second){
-      std::cout << f << " ";
-    }
-    std::cout << std::endl;
-  }
+  // std::cout << "pz_factors size " << pz_factors.size() << std::endl;
+  // //print out the pz_factors for each dimension
+  // for (auto factor : pz_factors){
+  //   std::cout << "dim idx " << factor.first << " : ";
+  //   for (auto f : factor.second){
+  //     std::cout << f << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
   
   PrintTitle("Generate Base States", verbose);
   // TODO(Chendi): just use next_states.empty() to check if we need to re-sample init population
@@ -607,20 +957,13 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     // }
   }
   else{
-    if (next_states->size() == 0){// size of next_states is 0
-      PrintTitle("Next States is empty, sample more states", verbose);
-      init_population = SampleInitPopulation(sketch_cache_);
-    }
-    else{// size of next_states is not 0
-      std::cout << "next_states size " << next_states->size() << std::endl;
-      for (auto s : *next_states){
-        init_population.push_back(s);
-      }
+    for (auto s : *next_states){
+      init_population.push_back(s);
     }
   }
 
   PrintTitle("Generate Neighbours", verbose);
-  Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors);
+  Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
 
   PrintTitle("Node Move", verbose);
   return NodeMove(neighbour_table, next_states);
@@ -697,10 +1040,153 @@ Array<State> SketchPolicyNode::GenerateSketches() {
   return out_states;
 }
 
+Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> conf_table, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info) {
+  // Use this population as the parallel degree to do sampling
+  // std::map<int, ConfigKey> conf_table;
+  
+  int population = conf_table.size();
+  // std::cout << "size of the conf_table: " << population << std::endl;
+  assert(sketches.size() == 1); 
+
+  State tmp_s = sketches[0]; // TODO: make muiltple sketch work later
+
+  int fail_ct = 0;
+  Array<State> out_states;
+  std::vector<std::mt19937> rand_gens;
+  rand_gens.reserve(population);
+  for (int i = 0; i < population; i++) {
+    rand_gens.push_back(std::mt19937(rand_gen()));
+  }
+
+  std::unordered_set<std::string> explored_state_strs;
+  // size_t iter = 1;
+  size_t unchange_cnt = 0;
+  
+  std::vector<State> temp_states(population);
+
+  std::vector<int> split_id;
+  // std::cout<< "SampleUniquePopulation function---> uniq pop" << population << std::endl;
+  for (auto sm : v_splitMeta_info){
+    //std::cout << *sm << std::endl;
+    split_id.push_back(sm->step_id);
+  }
+  // support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
+  for (int index = 0; index < population; index++) {
+    // Apply random annotation rules one by one
+    bool valid = true;
+    InitFillTileSizeUnique cust_rule;
+    InitUnroll cust_rule1;
+    InitThreadBind cust_rule2;
+    std::vector<PopulationGenerationRule*> cust_init_rules;
+    cust_init_rules.push_back(&cust_rule1);
+    cust_init_rules.push_back(&cust_rule2);
+
+
+    ConfigKey tile_config = conf_table[index];
+    // DEBUG:: try valid tile_config
+    //1 128 128 4 2 1
+    tile_config.clear();
+    std::vector<int> tmp = {1, 128, 128, 4, 2, 1};
+    tile_config.insert(tile_config.begin(), tmp.begin(), tmp.end());
+    
+    State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
+
+    if (cust_rule.Apply_unique(this, &tmp_s, tile_config, split_id) ==  
+      PopulationGenerationRule::ResultKind::kInvalid) {
+      valid = false;
+    }
+    // std::cout << "valid " << valid << std::endl;
+
+    for (const auto& rule : cust_init_rules) {
+      if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
+          PopulationGenerationRule::ResultKind::kInvalid) {
+        valid = false;
+        break;
+      }
+    }
+    std::cout << "tmp_s" << tmp_s << std::endl;
+    if (valid) {
+      temp_states[index] = std::move(tmp_s);
+    }
+  }
+  
+  // support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
+
+  //   // Apply random annotation rules one by one
+  //   bool valid = true;
+  //   InitFillTileSizeUnique cust_rule;
+  //   ConfigKey tile_config = conf_table[index];
+  //   tile_config.clear();
+  //   //1 128 128 4 2 1
+  //   std::vector<int> tmp = {1, 128, 128, 4, 2, 1};
+  //   tile_config.insert(tile_config.begin(), tmp.begin(), tmp.end());
+  //   State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
+
+  //   if (cust_rule.Apply_unique(this, &tmp_s, tile_config, split_id) ==  
+  //     PopulationGenerationRule::ResultKind::kInvalid) {
+  //     valid = false;
+  //   }
+
+  //   std::cout << "Done Apply_unique " << tmp_s << std::endl;
+  //   if (valid) {
+  //     temp_states[index] = std::move(tmp_s);
+  //   }
+  //   else{
+  //     exit(-1);
+  //   }
+  //   for (const auto& rule : init_rules) {
+  //     if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
+  //         PopulationGenerationRule::ResultKind::kInvalid) {
+  //       valid = false;
+  //       break;
+  //     }
+  //   }
+  //   if (valid) {
+  //     temp_states[index] = std::move(tmp_s);
+  //   }
+  // }); // parallel generate
+
+  // std::cout << "Done parallel generate" << std::endl;
+  // Filter out the states that were failed to apply initial rules
+  std::cout << "temp_states size: " << temp_states.size() << std::endl;
+  Array<State> cand_states;
+  for (auto tmp_s : temp_states) {
+    std::cout << "tmp_s.defined() " << tmp_s.defined() << std::endl;
+    if (tmp_s.defined()) {
+      cand_states.push_back(std::move(tmp_s));
+    } else {
+      fail_ct++;
+    }
+  }
+  std::cout << "before pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
+
+  unchange_cnt++;
+  if (!cand_states.empty()) {
+    // Run the cost model to make filter out states that failed to extract features.
+    // This may happen due to illegal schedules or the schedules that uses too much
+    // memory on GPU.
+
+    std::cout << "compute dag: infer bound" << std::endl;
+    cand_states = search_task->compute_dag.InferBound(cand_states);
+    
+    std::cout << "pruning the invalid state" << std::endl;
+    PruneInvalidState(search_task, &cand_states);
+    std::cout << "after pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
+    // TODO: check duplicate if generated code is same
+    for (size_t i = 0; i < cand_states.size(); i++) {
+      out_states.push_back(std::move(cand_states[i]));
+    }
+  }
+  std::cout << "after pruning, out_states size: " << out_states.size() << std::endl;
+  std::cout << "fail_ct: " << fail_ct << std::endl;
+
+  return out_states;
+}
+
 Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
   // Use this population as the parallel degree to do sampling
-  // int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
-  int population = 10240;
+  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  // int population = 10240;
 
   auto tic_begin = std::chrono::high_resolution_clock::now();
 

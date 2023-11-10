@@ -135,7 +135,7 @@ class SketchPolicyNode : public SearchPolicyNode {
 
   std::string state_to_string(const State& state, std::vector<splitMeta*> v_splitMeta_info, const SearchTask& task);
 
-  std::unordered_map<int, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
+  std::unordered_map<std::string, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
                                 std::vector<splitMeta*> v_splitMeta_info);
 
   /*!
@@ -162,14 +162,17 @@ class SketchPolicyNode : public SearchPolicyNode {
 
   Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states = nullptr, bool firsttime_random = false);
 
-  Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<int, std::vector<int>> pz_factors);
+  Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
   Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
   
-  Array<State> GetDirectNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors);
+  Array<State> GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
-  Array<State> GetDiagonalNeighbors(State state, std::unordered_map<int, std::vector<int>> pz_factors);
+  Array<State> GetDiagonalNeighbors(State state, std::unordered_map<std::string, std::vector<int>> pz_factors);
 
+  std::unordered_map<std::string, std::vector<int>> GetSateFactor(const SearchTask& task, const State& state);
+
+  Array<State> SampleUniquePopulation(std::map<int, ConfigKey> conf_table, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   /*!
    * \brief Pick states from best states and random states with eps-greedy policy.
    * \param best_states States picked by cost model.

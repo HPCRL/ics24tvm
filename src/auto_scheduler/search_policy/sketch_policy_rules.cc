@@ -24,12 +24,19 @@
  */
 
 #include "sketch_policy_rules.h"
+#include <tvm/auto_scheduler/feature.h>
+#include <tvm/auto_scheduler/measure.h>
+#include <tvm/driver/driver_api.h>
+#include <tvm/tir/analysis.h>
+#include <tvm/tir/stmt_functor.h>
+#include <tvm/tir/transform.h>
 
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "assert.h"
 #include "sketch_policy.h"
 
 namespace tvm {
@@ -530,6 +537,61 @@ PopulationGenerationRule::ResultKind InitFillTileSize::Apply(SketchPolicyNode* p
 
   return ResultKind::kValid;
 }
+
+PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(SketchPolicyNode* policy, State* state, ConfigKey tile_config, std::vector<int> split_id) {
+  //std::cout<< "InitFillTileSizeUnique::Apply_unique function---> " << std::endl;
+  StateNode* pstate = state->CopyOnWrite();
+  // for(int i = 0; i < tile_config.size(); i++){
+  //   std::cout << tile_config[i] << " ";
+  // }
+  int i = 0;
+  for (auto step_id : split_id){
+    //std::cout << "step_id: " << step_id << " i " << i << std::endl;
+    auto ps = (*state)->transform_steps[step_id].as<SplitStepNode>();
+    int conf_offset = i;
+    Array<Integer> candidate_lengths;
+    if (ps->lengths.size() == 4){
+      // parallel loop dim
+      // reg = tile_sizes[0] spm->tile_sizes[2]  spm->tile_sizes[3] << std::endl;
+      // # th = tile_sizes[1] 
+      Integer reg_tile = tile_config[conf_offset];
+      Integer num_thread = tile_config[conf_offset+1];
+      // std::cout << "num_thread: " << num_thread << " reg_tile: " << reg_tile << std::endl;
+      candidate_lengths.push_back(reg_tile);
+      candidate_lengths.push_back(num_thread);
+      candidate_lengths.push_back(1);
+      candidate_lengths.push_back(1);
+    }
+    else if (ps->lengths.size() == 2){
+      // reduction loop dim
+      Integer outer_r = tile_config[conf_offset];
+      Integer inner_r = tile_config[conf_offset+1];
+      // std::cout << "outer_r: " << outer_r << " inner_r: " << inner_r << std::endl;
+      candidate_lengths.push_back(outer_r);
+      candidate_lengths.push_back(inner_r);
+    }
+    // std::cout << "InitFillTileSizeUnique  " << step_id << std::endl;
+    // std::cout << "InitFillTileSizeUnique  candidate_lengths" << candidate_lengths << std::endl;
+
+    pstate->transform_steps.Set(
+          step_id,
+          SplitStep(ps->stage_id, ps->iter_id, ps->extent,
+                    Array<Optional<Integer>>(candidate_lengths.begin(), candidate_lengths.end()),
+                    ps->inner_to_outer));
+
+    std::cout << "pstate: " <<  pstate << std::endl;
+  
+    i+=2;
+  }
+  pstate->concrete = true;
+  return ResultKind::kValid;
+}
+
+PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply(SketchPolicyNode* policy, State* state,
+                                                             std::mt19937* rand_gen) const {
+  return ResultKind::kInvalid;
+}
+
 
 PopulationGenerationRule::ResultKind InitChangeComputeLocation::Apply(
     SketchPolicyNode* policy, State* state, std::mt19937* rand_gen) const {

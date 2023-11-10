@@ -35,6 +35,7 @@
 
 #include "utils.h"
 
+using ConfigKey= std::vector<int>; 
 namespace tvm {
 namespace auto_scheduler {
 
@@ -181,10 +182,14 @@ class PopulationGenerationRule {
   class rule_name : public PopulationGenerationRule {                                             \
    public:                                                                                        \
     ResultKind Apply(SketchPolicyNode* policy, State* state, std::mt19937* rand_gen) const final; \
+    ResultKind Apply_unique(SketchPolicyNode* policy, State* state, ConfigKey tile_config, std::vector<int> split_id);\
   };
 
 /*! \brief The rule that fills the incomplete SplitSteps. */
 DEFINE_INIT_POPULATION_RULE(InitFillTileSize);
+
+/*! \brief The rule that fills the incomplete SplitSteps. */
+DEFINE_INIT_POPULATION_RULE(InitFillTileSizeUnique);
 
 /*! \brief The rule that randomly changes the computation location for some stages that do not
  * need tiling and are not strictly inlineable(e.g. data padding). */
