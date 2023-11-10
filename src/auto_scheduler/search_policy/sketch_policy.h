@@ -124,6 +124,12 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> GenerateSketches();
 
+  std::map<int, ConfigKey> GenerateUniquetable(SketchPolicyNode* policy, State state, 
+                              std::vector<splitMeta*> v_splitMeta_info, ConfigKey base, std::unordered_map<std::string, std::vector<int>> current_config);
+  ConfigKey map_to_configkey(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
+  std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
+
+bool isConfigKeyInTable(int key) ;
   /*!
    * \brief Sample the init population.
    * \param sketches The initial sketches for the sampled population
@@ -192,6 +198,7 @@ class SketchPolicyNode : public SearchPolicyNode {
 
   /*! \brief The cached sketches */
   Array<State> sketch_cache_;
+  std::map<int, ConfigKey> unique_conf_table_;
 
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;

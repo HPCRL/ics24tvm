@@ -230,6 +230,9 @@ class XGBModel(PythonBasedModel):
             The predicted scores for all states
         """
         features = get_per_store_features_from_states(states, task)
+        # for idx, feature in enumerate(features):
+        #     print(f"state = {states[idx]}")
+        #     print(f"feature = {feature}")
         if self.bst is not None and len(self.inputs) > self.num_warmup_sample:
             dtest, pack_ids = feature_to_pack_sum_xgbmatrix(features)
             raw_preds = self.bst.predict(dtest)
