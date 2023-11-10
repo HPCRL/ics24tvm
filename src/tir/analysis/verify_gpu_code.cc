@@ -38,6 +38,27 @@ namespace tir {
 
 class GPUCodeVerifier : public StmtExprVisitor {
  public:
+  // std::vector<String> Verify(Stmt stmt, int64_t max_local_memory_per_block,
+  //                            int64_t max_shared_memory_per_block, int64_t max_threads_per_block,
+  //                            int64_t max_thread_x, int64_t max_thread_y, int64_t max_thread_z,
+  //                            int64_t max_vthread, int64_t max_vector_bytes, int64_t max_kernels) {
+  //   max_local_memory_per_block_ = static_cast<size_t>(max_local_memory_per_block);
+  //   max_shared_memory_per_block_ = static_cast<size_t>(max_shared_memory_per_block);
+  //   max_threads_per_block_ = static_cast<size_t>(max_threads_per_block);
+  //   max_thread_x_ = static_cast<size_t>(max_thread_x);
+  //   max_thread_y_ = static_cast<size_t>(max_thread_y);
+  //   max_thread_z_ = static_cast<size_t>(max_thread_z);
+  //   max_vthread_ = static_cast<size_t>(max_vthread);
+  //   max_vector_bytes_ = static_cast<size_t>(max_vector_bytes);
+  //   max_kernels_ = static_cast<size_t>(max_kernels);
+  //   Reset_();
+
+  //   // TODO(jcf94): Add support of detecting CUDA Misaligned Address error
+  //   this->VisitStmt(stmt);
+
+  //   return errors_;
+  // }
+
   std::vector<String> Verify(Stmt stmt, int64_t max_local_memory_per_block,
                              int64_t max_shared_memory_per_block, int64_t max_threads_per_block,
                              int64_t max_thread_x, int64_t max_thread_y, int64_t max_thread_z,
@@ -57,13 +78,13 @@ class GPUCodeVerifier : public StmtExprVisitor {
 
     // TODO(jcf94): Add support of detecting CUDA Misaligned Address error
     this->VisitStmt(stmt);
-
     res->push_back(local_memory_per_block_);
     res->push_back(shared_memory_per_block_);
     res->push_back(thread_per_block_);
 
     return errors_;
   }
+
 
   void VisitStmt_(const AllocateNode* op) final {
     StmtVisitor::VisitStmt_(op);
@@ -72,10 +93,12 @@ class GPUCodeVerifier : public StmtExprVisitor {
     // visit an allocation of a buffer in shared memory, record its size
     if (storage_scope.rank == runtime::StorageRank::kLocal) {
       size_t size = static_cast<size_t>(op->ConstantAllocationSize());
-      local_memory_per_block_ += size * op->dtype.bytes() * op->dtype.lanes();
+      //local_memory_per_block_ += size * op->dtype.bytes() * op->dtype.lanes();
+      local_memory_per_block_ += size;
     } else if (storage_scope.rank == runtime::StorageRank::kShared) {
       size_t size = static_cast<size_t>(op->ConstantAllocationSize());
       shared_memory_per_block_ += size * op->dtype.bytes() * op->dtype.lanes();
+      // shared_memory_per_block_ += size ;
     }
     if (op->dtype.lanes() > 1) {
       if (static_cast<size_t>(op->dtype.lanes() * op->dtype.bytes()) > max_vector_bytes_) {
@@ -234,9 +257,9 @@ class GPUCodeVerifier : public StmtExprVisitor {
 
   size_t thread_x_extent_, thread_y_extent_, thread_z_extent_;
 
-  size_t local_memory_per_block_;
-  size_t shared_memory_per_block_;
-  size_t thread_per_block_;
+  size_t local_memory_per_block_{0};
+  size_t shared_memory_per_block_{0};
+  size_t thread_per_block_{0};
   size_t kernels_launched_{0};
 
   size_t max_local_memory_per_block_;
@@ -294,11 +317,13 @@ std::vector<String> VerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> c
       LOG(FATAL) << "Invalid check item: " << iter.first;
     }
   }
-
+  std::vector<size_t> res;
+  res.reserve(3);
   return verifier.Verify(func->body, max_local_memory_per_block, max_shared_memory_per_block,
                          max_threads_per_block, max_thread_x, max_thread_y, max_thread_z,
-                         max_vthread, max_vector_bytes, max_kernels);
+                         max_vthread, max_vector_bytes, max_kernels, &res);
 }
+
 
 std::vector<String> xVerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> constraints, std::vector<size_t>* res) {
   GPUCodeVerifier verifier;
@@ -337,11 +362,14 @@ std::vector<String> xVerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> 
       LOG(FATAL) << "Invalid check item: " << iter.first;
     }
   }
+  //looks like vthread bound has issues
+  max_vthread = 256;
 
   return verifier.Verify(func->body, max_local_memory_per_block, max_shared_memory_per_block,
                          max_threads_per_block, max_thread_x, max_thread_y, max_thread_z,
                          max_vthread, max_vector_bytes, max_kernels, 
-                         res);
+                         res
+                         );
 }
 
 bool VerifyGPUCode(const PrimFunc& func, Map<String, PrimExpr> constraints) {
@@ -398,7 +426,8 @@ Pass xVerifyGPUCode(Map<String, PrimExpr> constraints, std::vector<size_t>* res)
 }
 
 TVM_REGISTER_GLOBAL("tir.transform.VerifyGPUCode").set_body_typed(VerifyGPUCode);
-
+// Yufan: not to register as global function; PackFunc will complain
+// TVM_REGISTER_GLOBAL("tir.transform.xVerifyGPUCode").set_body_typed(xVerifyGPUCode);
 }  // namespace transform
 }  // namespace tir
 }  // namespace tvm
