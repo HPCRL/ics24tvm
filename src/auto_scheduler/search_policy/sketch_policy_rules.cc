@@ -579,7 +579,6 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
                     Array<Optional<Integer>>(candidate_lengths.begin(), candidate_lengths.end()),
                     ps->inner_to_outer));
 
-    std::cout << "pstate: " <<  pstate << std::endl;
   
     i+=2;
   }
@@ -927,9 +926,10 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
         to_fuse.push_back((*state)->stages[stage_id]->iters[i]);
       }
       const auto& vthread_it = state->fuse(stage_id, to_fuse);
-      if (GetExtent(vthread_it) > policy->search_task->hardware_params->max_vthread_extent) {
-        return ResultKind::kInvalid;
-      }
+      // if (GetExtent(vthread_it) > policy->search_task->hardware_params->max_vthread_extent) {
+      //   std::cout << "BOOM vtheard !! " << GetExtent(vthread_it) << " -- " << policy->search_task->hardware_params->max_vthread_extent << std::endl;
+      //   return ResultKind::kInvalid;
+      // }
       state->bind(stage_id, vthread_it, IteratorAnnotation::kVThread);
 
       // Fuse the third outermost space tile as threadIdx
@@ -946,6 +946,7 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
       const auto& threadidx_it = state->fuse(stage_id, to_fuse);
       if (check_min_thread_extent &&
           GetExtent(threadidx_it) < policy->search_task->hardware_params->warp_size) {
+        // std::cout << "BOOM threadidx_it !! " <<  GetExtent(threadidx_it) << " -- " << policy->search_task->hardware_params->warp_size << std::endl;
         return ResultKind::kInvalid;
       }
       state->bind(stage_id, threadidx_it, IteratorAnnotation::kThreadX);

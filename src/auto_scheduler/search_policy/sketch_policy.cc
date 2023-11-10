@@ -682,11 +682,11 @@ std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<
   }
   ConfigKey current = map_to_configkey(current_config, v_splitMeta_info);
   // print current
-  std::cout << "current: " << std::endl;
-  for (int i = 0; i < current.size(); i++){
-    std::cout << current[i] << " ";
-  }
-  std::cout << std::endl;
+  // std::cout << "current: " << std::endl;
+  // for (int i = 0; i < current.size(); i++){
+  //   std::cout << current[i] << " ";
+  // }
+  // std::cout << std::endl;
 
   // printout all neighbors_config_key  
   for (int i = 0; i < neighbors_config_key.size(); i++){
@@ -750,12 +750,12 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       neighbors.push_back(n);
     }
 
-    // get diagnal neighbors
-    Array<State> diagonal_neighbors = GetDiagonalNeighbors(state, pz_factors);
-    std::cout << "diagonal_neighbors size: " << diagonal_neighbors.size() << "\n";
-    for (auto n : diagonal_neighbors){
-      neighbors.push_back(n);
-    }
+    // // get diagnal neighbors
+    // Array<State> diagonal_neighbors = GetDiagonalNeighbors(state, pz_factors);
+    // std::cout << "diagonal_neighbors size: " << diagonal_neighbors.size() << "\n";
+    // for (auto n : diagonal_neighbors){
+    //   neighbors.push_back(n);
+    // }
     neighbour_table.push_back(neighbors);
   }
 
@@ -1070,32 +1070,26 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     //std::cout << *sm << std::endl;
     split_id.push_back(sm->step_id);
   }
-  // support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
-  for (int index = 0; index < population; index++) {
+  support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
     // Apply random annotation rules one by one
     bool valid = true;
     InitFillTileSizeUnique cust_rule;
     InitUnroll cust_rule1;
     InitThreadBind cust_rule2;
     std::vector<PopulationGenerationRule*> cust_init_rules;
-    cust_init_rules.push_back(&cust_rule1);
     cust_init_rules.push_back(&cust_rule2);
+    cust_init_rules.push_back(&cust_rule1);
 
 
     ConfigKey tile_config = conf_table[index];
-    // DEBUG:: try valid tile_config
-    //1 128 128 4 2 1
-    tile_config.clear();
-    std::vector<int> tmp = {1, 128, 128, 4, 2, 1};
-    tile_config.insert(tile_config.begin(), tmp.begin(), tmp.end());
-    
+
     State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
 
     if (cust_rule.Apply_unique(this, &tmp_s, tile_config, split_id) ==  
       PopulationGenerationRule::ResultKind::kInvalid) {
       valid = false;
     }
-    // std::cout << "valid " << valid << std::endl;
+    // std::cout << "Done Apply_unique , valid: " << valid << std::endl;
 
     for (const auto& rule : cust_init_rules) {
       if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
@@ -1104,61 +1098,26 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
         break;
       }
     }
-    std::cout << "tmp_s" << tmp_s << std::endl;
+    // std::cout << "done apply cust_init_rules, valid: " << valid << std::endl;
     if (valid) {
+      // std::cout << "success: state move to temp_states" << std::endl;
+      // std::cout << tmp_s << std::endl;
+
       temp_states[index] = std::move(tmp_s);
     }
-  }
+  }); // parallel generate
   
-  // support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
-
-  //   // Apply random annotation rules one by one
-  //   bool valid = true;
-  //   InitFillTileSizeUnique cust_rule;
-  //   ConfigKey tile_config = conf_table[index];
-  //   tile_config.clear();
-  //   //1 128 128 4 2 1
-  //   std::vector<int> tmp = {1, 128, 128, 4, 2, 1};
-  //   tile_config.insert(tile_config.begin(), tmp.begin(), tmp.end());
-  //   State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
-
-  //   if (cust_rule.Apply_unique(this, &tmp_s, tile_config, split_id) ==  
-  //     PopulationGenerationRule::ResultKind::kInvalid) {
-  //     valid = false;
-  //   }
-
-  //   std::cout << "Done Apply_unique " << tmp_s << std::endl;
-  //   if (valid) {
-  //     temp_states[index] = std::move(tmp_s);
-  //   }
-  //   else{
-  //     exit(-1);
-  //   }
-  //   for (const auto& rule : init_rules) {
-  //     if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
-  //         PopulationGenerationRule::ResultKind::kInvalid) {
-  //       valid = false;
-  //       break;
-  //     }
-  //   }
-  //   if (valid) {
-  //     temp_states[index] = std::move(tmp_s);
-  //   }
-  // }); // parallel generate
-
   // std::cout << "Done parallel generate" << std::endl;
   // Filter out the states that were failed to apply initial rules
-  std::cout << "temp_states size: " << temp_states.size() << std::endl;
   Array<State> cand_states;
   for (auto tmp_s : temp_states) {
-    std::cout << "tmp_s.defined() " << tmp_s.defined() << std::endl;
     if (tmp_s.defined()) {
       cand_states.push_back(std::move(tmp_s));
     } else {
       fail_ct++;
     }
   }
-  std::cout << "before pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
+  // std::cout << "before pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
 
   unchange_cnt++;
   if (!cand_states.empty()) {
@@ -1166,19 +1125,19 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     // This may happen due to illegal schedules or the schedules that uses too much
     // memory on GPU.
 
-    std::cout << "compute dag: infer bound" << std::endl;
+    // std::cout << "compute dag: infer bound" << std::endl;
     cand_states = search_task->compute_dag.InferBound(cand_states);
     
-    std::cout << "pruning the invalid state" << std::endl;
+    // std::cout << "pruning the invalid state" << std::endl;
     PruneInvalidState(search_task, &cand_states);
-    std::cout << "after pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
+    // std::cout << "after pruning invalid state, cand_states size: " << cand_states.size() << std::endl;
     // TODO: check duplicate if generated code is same
     for (size_t i = 0; i < cand_states.size(); i++) {
       out_states.push_back(std::move(cand_states[i]));
     }
   }
-  std::cout << "after pruning, out_states size: " << out_states.size() << std::endl;
-  std::cout << "fail_ct: " << fail_ct << std::endl;
+  // std::cout << "after pruning, out_states size: " << out_states.size() << std::endl;
+  // std::cout << "fail_ct: " << fail_ct << std::endl;
 
   return out_states;
 }
