@@ -25,6 +25,7 @@
  */
 
 #include "sketch_policy.h"
+#include <tvm/auto_scheduler/feature.h>
 
 #include <tvm/runtime/registry.h>
 #include <tvm/support/parallel_for.h>
@@ -240,8 +241,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     while (ct < n_trials) {
       // create new predict based search
       local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
-      std::cout << "local min num: " << local_min_best_states.size() << std::endl;
-      std::cout << "next states num: " << next_states.size() << std::endl;
+      // std::cout << "local min num: " << local_min_best_states.size() << std::endl;
+      // std::cout << "next states num: " << next_states.size() << std::endl;
       if (next_states.empty()){
         firsttime_random = true;
       }
@@ -254,18 +255,18 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
         // Currently it's hard to detect if all of the search space has been traversed
         // Stop if no extra valid states found in several retries
-        // if (inputs.empty()) {
-        //   if (empty_retry_count-- > 0) {
-        //     continue;
-        //   } else {
-        //     StdCout(verbose) << "It seems all candidates in the search space have been measured."
-        //                     << std::endl;
-        //     break;
-        //   }
-        // } else {
-        //   // Reset the retry count
-        //   empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
-        // }
+        if (inputs.empty()) {
+          if (empty_retry_count-- > 0) {
+            continue;
+          } else {
+            StdCout(verbose) << "It seems all candidates in the search space have been measured."
+                            << std::endl;
+            break;
+          }
+        } else {
+          // Reset the retry count
+          empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
+        }
 
         // Measure candidate states
         PrintTitle("Measure", verbose);
@@ -681,7 +682,7 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetSateFacto
   return current_config;
 }
 
-/* Generate diagnal neighbor states for state
+/* Generate diagonal neighbor states for state
 *  @param states: base states
 *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
 *  @return: neighbors states table
@@ -1020,13 +1021,23 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
 
 
   std::unordered_map<std::string, std::vector<int>> current_config = GetSateFactor(search_task, state);
+
   // std::cout << "base :\n" << state << std::endl;
 
   // ConfigKey base = map_to_configkey(current_config, v_splitMeta_info);
   // // unique_conf_table_.clear();
   // unique_conf_table_ =  GenerateUniquetable(this,  state, v_splitMeta_info, base, current_config);
 
-  // std::cout << "[GetDirectNeighbors] v_splitMeta_info size: " << v_splitMeta_info.size() << std::endl;
+  // std::cout << "[GetDirectNeighbors] current_config "  << std::endl;
+  // for (auto c : current_config){
+  //   std::string key = c.first;
+  //   std::vector<int> value = c.second;
+  //   std::cout << "key: " << key << std::endl;
+  //   for (int i = 0; i < value.size(); i++){
+  //     std::cout << value[i] << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
   // up-down for neighbors
   neighbors_config_key = UpDownMutate(current_config, pz_factors, v_splitMeta_info);
   
@@ -1098,7 +1109,12 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 
   std::cout << "number of base states: " << states.size() << "\n";
   // TODO(Chendi): Multi-threading
+
+  int round = 0;
   for (const auto& state : states) {
+    // if (round++ > 2){
+    //   break;
+    // } 
     Array<State> neighbors;
     
     // insert the base state, fix in the first position
@@ -1112,13 +1128,13 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       neighbors.push_back(n);
     }
 
-    // // get diagnal neighbors
-    // for (auto n : direct_neighbors){
-    //   Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
-    //   for (auto t : tmp){
-    //     neighbors.push_back(t);
-    //   }
-    // }
+    // get diagnal neighbors
+    for (auto n : direct_neighbors){
+      Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
+      for (auto t : tmp){
+        neighbors.push_back(t);
+      }
+    }
 
     neighbour_table.push_back(neighbors);
   }
@@ -1134,11 +1150,11 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 *  @return: local mins and next states
 */
 Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states){
-    int count = 0;
+  int count = 0;
   Array<State> local_min;
   int round = 0;
   for (auto path : neighbour_table){
-    // if (round++ > 2){
+    // if (round++ > 4){
     //   break;
     // }
     if (path.empty()){
@@ -1359,6 +1375,19 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     }
   }
 
+  // // apply prune using extract_features
+  // Array<State> base_population;
+  // std::cout << "before prune size of init_population: " << init_population.size() << std::endl;
+  // for (auto state : init_population){
+  //   // valid tuple create for prune
+  //   int a, b, c, d;
+  //   std::vector<float> features_extracted;
+  //   std::tie(a, b, c, d) = extract_features(this->search_task, state, v_splitMeta_info, &features_extracted);
+  //   if (a!=-1) base_population.push_back(state);
+  // }
+  // init_population = base_population;
+  // std::cout << "after prune size of init_population: " << base_population.size() << std::endl;
+
   PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
 
@@ -1443,7 +1472,7 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
   
   int population = conf_table.size();
 
-  // std::cout << "conf_table size: " << conf_table.size() << " table: " << std::endl;
+  // std::cout << " [SampleUniquePopulation] conf_table size: " << conf_table.size() << " table: " << std::endl;
   // for (auto c : conf_table){
   //   std::cout << c.first << " ";
   //   for (auto cc : c.second){

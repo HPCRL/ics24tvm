@@ -258,7 +258,7 @@ class XGBModel(PythonBasedModel):
         for idx, feature in enumerate(features):
             if feature.min() == feature.max() == 0:
                 ret[idx] = float("-inf")
-        print(f"xx ret = {ret}", flush=True)
+        # print(f"xx ret = {ret}", flush=True)
         return ret
 
     def predict_stages(self, task, states):

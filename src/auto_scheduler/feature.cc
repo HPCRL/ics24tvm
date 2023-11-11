@@ -2299,7 +2299,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
   // if (reg_alloc > 256){
-  //   std::cout << "WARNING! not pure REG " << reg_alloc << std::endl;
+  //   std::cout << "WARNING! pure REG " << reg_alloc << std::endl;
   // }
 
   std::map<std::string, int> buf_reuse_map;
@@ -2410,6 +2410,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   Concurrent_estimate = WLP*ILP;
   OI_Global = computeOI_Global(global_trans, parallel_data_map, true_reduction_data_map, stencil_reduction_data_map);
 
+  // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
   // std::cout << "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
 
@@ -2440,6 +2441,9 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   //   return std::make_tuple(-1, -1, -1, -1);
   // }
   if (thread_block_size < 32 || thread_block_size > 1024){
+    return std::make_tuple(-1, -1, -1, -1);
+  }
+  if (totalReg > 256){
     return std::make_tuple(-1, -1, -1, -1);
   }
 
@@ -2594,6 +2598,9 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     std::vector<size_t> res; //to keep actual resource usage
     res.reserve(5);
 
+    // std::cout << "[GetPerStoreFeaturesWorkerFunc] " << std::endl << std::endl;
+    // std::cout << " state : " << state << std::endl; 
+
     if (IsGPUTask(task)) {
       auto pass_list = Array<tvm::transform::Pass>();
       // Phase 0
@@ -2639,11 +2646,9 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
      */
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
-    std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
+    // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
     GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
 
-
-    std::cout << "feat[0]" << (*feature)[0] << std::endl;
     // std::cout << "feature size : " << feature->size() << std::endl;
     // exit(-1);
     assert(feature->size() == 4);
@@ -2667,14 +2672,22 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
 
 
     std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
-    //call extract_features
-    extract_features(task, state, v_splitMeta_info, &features_extracted);
+
+    // valid tuple create for prune
+    int a, b, c, d;
+    std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted);
+    if (a==-1){
+      // set all features to -1
+      for (int i = 0; i < 7; i++){
+        features_extracted[i] = 0;
+      }
+    }
 
     // clear the feature vector
     feature->clear();
     feature->push_back(1);
     for (auto fea: features_extracted){
-      //std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
+      // std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
       feature->push_back(fea);
     }
     // std::cout << "feature size : " << feature->size() << std::endl;

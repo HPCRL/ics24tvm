@@ -59,6 +59,7 @@ void parallel_for(int begin, int end, const std::function<void(int)>& f, int ste
   }
 
   int default_num_threads = std::thread::hardware_concurrency();
+  // int default_num_threads = 1;
   const auto& run_partitions = partitioner(begin, end, step, default_num_threads);
 
   std::vector<std::thread> threads;

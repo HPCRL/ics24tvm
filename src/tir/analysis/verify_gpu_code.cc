@@ -82,6 +82,12 @@ class GPUCodeVerifier : public StmtExprVisitor {
     res->push_back(shared_memory_per_block_);
     res->push_back(thread_per_block_);
 
+    // std::cout << "[Verify] errors_ : " << std::endl;
+    // for (auto& err : errors_) {
+    //   std::cout << "    " << err << std::endl;
+    // }
+    // std::cout<< "---------------------------------------------\n" << std::endl; 
+
     return errors_;
   }
 
