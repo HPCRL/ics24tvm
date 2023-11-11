@@ -2639,9 +2639,11 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
      */
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
+    std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
     GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
 
-    // std::cout << "feat[0]" << (*feature)[0] << std::endl;
+
+    std::cout << "feat[0]" << (*feature)[0] << std::endl;
     // std::cout << "feature size : " << feature->size() << std::endl;
     // exit(-1);
     assert(feature->size() == 4);
