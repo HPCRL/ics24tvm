@@ -1540,17 +1540,13 @@ struct StencilReductionData {
   int pz;
 };
 
-std::map<std::string, ParallelDataStruct> parallel_data_map;
-std::map<std::string, TrueReductionData> true_reduction_data_map;
-std::map<std::string, StencilReductionData> stencil_reduction_data_map;
-
 
 /*!
 * \brief compute the ILP
 * For parallel dims, ILP = reg1 * reg2 * reg3 * ... * regn
 */
-double computeILP(const std::map<std::string, ParallelDataStruct>& parallel_data_map) {
-    double ilp = 1;
+float computeILP(const std::map<std::string, ParallelDataStruct>& parallel_data_map) {
+    float ilp = 1;
     for (const auto &item : parallel_data_map) {
         // std::cout << "parallel_data_map " << item.first << " " << item.second.reg << std::endl;
         ilp *= item.second.reg;
@@ -1563,8 +1559,8 @@ double computeILP(const std::map<std::string, ParallelDataStruct>& parallel_data
 * WLP_SM = (SM_capacity / SM_data_volume) * ceil(TBsize/32)
 */
 
-double computeWLP_SM(int SM_data_volume, int TBsize) {
-    double wlp_sm = 0;
+float computeWLP_SM(int SM_data_volume, int TBsize) {
+    float wlp_sm = 0;
     wlp_sm = (64 * 1024.0 / SM_data_volume) * std::ceil(TBsize/32.0);
     return wlp_sm;
 }
@@ -1574,8 +1570,8 @@ double computeWLP_SM(int SM_data_volume, int TBsize) {
 * \brief compute the WLP of REG
 * WLP_Reg = (64*1024)/((Total_Regs+25)*TBsize )
 */
-double computeWLP_REG(int Total_Regs, int TBsize) {
-    double wlp_reg = 0;
+float computeWLP_REG(int Total_Regs, int TBsize) {
+    float wlp_reg = 0;
     wlp_reg = (64 * 1024.0) / ((Total_Regs + 25) * TBsize);
     return wlp_reg;
 }
@@ -1584,11 +1580,11 @@ double computeWLP_REG(int Total_Regs, int TBsize) {
 * \brief compute the OI for global transactions
 * OI_Global = total_OI*1.0 / (32.0 * float(global_trans))
 */
-double computeOI_Global(float global_trans, const std::map<std::string, ParallelDataStruct>& parallel_data_map,
+float computeOI_Global(float global_trans, const std::map<std::string, ParallelDataStruct>& parallel_data_map,
                         const std::map<std::string, TrueReductionData>& true_reduction_data_map,
                         const std::map<std::string, StencilReductionData>& stencil_reduction_data_map) {
-    double total_OI = 1;
-    double OI_Global = 0;
+    float total_OI = 1;
+    float OI_Global = 0;
     for (const auto &item : parallel_data_map) {
         total_OI *= item.second.pz;
     }
@@ -1817,7 +1813,9 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, const State& s
 }
 
 std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features) {
-
+  std::map<std::string, ParallelDataStruct> parallel_data_map;
+  std::map<std::string, TrueReductionData> true_reduction_data_map;
+  std::map<std::string, StencilReductionData> stencil_reduction_data_map;
 
   // std::cout << "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
   float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM;
@@ -2413,7 +2411,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
   // std::cout << "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
-
 
   // push back to features, wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global
   features->push_back(wave_efficiency);
