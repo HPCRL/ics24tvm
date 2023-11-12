@@ -238,26 +238,57 @@ class XGBModel(PythonBasedModel):
             raise RuntimeError("TVM_HOME environment variable is not set")
         else:
             model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "model.json")
+            bst = xgb.Booster()
+            bst.load_model(model_file)
 
-            # load model for testing 1024 matmul :xgb_uniform_model_for_test_set_1024.pkl
+            # # load model for testing 1024 matmul :xgb_uniform_model_for_test_set_1024.pkl
             # import pickle
-            # model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "xgb_uniform_model_for_test_set_1024.pkl")
+            # model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "xgb_model_test_set_4_1k.pkl")
+            # bst = pickle.load(open(model_file, "rb"))
+            
+            # print("Model loaded from: ", model_file, flush=True)
+            # print(f"type of bst = {type(bst)}", flush=True)
+            
+        if bst is None:
+            print("bst is None", flush=True)
+            raise RuntimeError("bst is None")
 
-        bst = xgb.Booster()
-        bst.load_model(model_file)
-
-        if bst is not None and len(features) > self.num_warmup_sample:
+        if not isinstance(bst, xgb.Booster):
+            print("bst is not xgb.Booster", flush=True)
+            raise RuntimeError("bst is not xgb.Booster")
+        
+        # # print features for debugging mismatch
+        # for i in range(len(features)):
+        #     print(f"features[{i}] = {features[i]}", flush=True)
+        
+        # if bst is not None and len(features) > self.num_warmup_sample:
+        if bst is not None: # remove warmup, it's offline model
             dtest, pack_ids = feature_to_pack_sum_xgbmatrix(features)
+            
+            #print dtest
+            # print(f"predict dtest = {dtest}", flush=True)
 
             raw_preds = bst.predict(dtest)
             ret = predict_throughput_pack_sum(raw_preds, pack_ids)
+            
+            # print(f"predict raw_preds = {raw_preds}", flush=True)
         else:
+            # print(f"predict features = {features}", flush=True)
             ret = np.random.uniform(0, 1, (len(states),))
+            # print(f"predict uniformed ret = {ret}", flush=True)
 
         # Predict -inf for invalid states that failed to be lowered.
         for idx, feature in enumerate(features):
             if feature.min() == feature.max() == 0:
                 ret[idx] = float("-inf")
+
+        # invalid states if all other ret are -inf
+        for i in range(1, len(ret)):
+            if ret[i] != float("-inf"):
+                break
+            if i == len(ret) - 1:
+                # print(f"debug: invalid state: xx ret = {ret}", flush=True)
+                ret[0] = float("-inf")
         # print(f"xx ret = {ret}", flush=True)
         return ret
 
