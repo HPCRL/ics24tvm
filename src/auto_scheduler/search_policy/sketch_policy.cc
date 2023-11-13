@@ -1264,6 +1264,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     
     State state;
     state = state_ite;
+    std::unordered_map<std::string, std::vector<int>> current_base = GetSateFactor(search_task, state);
     // // insert the base state, fix in the first position
     // neighbors.push_back(state);
 
@@ -1272,6 +1273,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     //32 4 1 16 1 1 debugg
     if (firstround){
       ConfigKey base = {32, 4, 1, 16, 1, 1};
+      // ConfigKey base = map_to_configkey(current_base, v_splitMeta_info);
       // config table 
       std::map<int, ConfigKey> conf_table_base;
       conf_table_base[0] = base;
@@ -1294,18 +1296,20 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       neighbors.push_back(n);
     }
 
-    // // get diagnal neighbors
-    // Array<State> diagonal_neighbors;
-    // for (auto n : direct_neighbors){
-    //   Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
-    //   for (auto t : tmp){
-    //     diagonal_neighbors.push_back(t);
-    //   }
-    // }
+    // get diagnal neighbors
+    Array<State> diagonal_neighbors;
+    for (auto n : direct_neighbors){
+      Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
+      for (auto t : tmp){
+        diagonal_neighbors.push_back(t);
+      }
+    }
 
-    // for (auto n : diagonal_neighbors){
-    //   neighbors.push_back(n);
-    // }
+    for (auto n : diagonal_neighbors){
+      neighbors.push_back(n);
+    }
+
+    std::cout << "size of diagonal_neighbors: " << diagonal_neighbors.size() << std::endl;
 
     // Array<State> diagonal_diag_neighbors;
     // for (auto n : diagonal_neighbors){
@@ -1345,9 +1349,10 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     //   }
     // }
     // neighbors = tmp;
-    // std::cout << "neighbors size after remove duplicates : " << neighbors.size() << "\n";
 
-    std::unordered_map<std::string, std::vector<int>> current_base = GetSateFactor(search_task, state);
+
+    std::cout << "neighbors size : " << neighbors.size() << "\n";
+
     // map_to_configkey
     ConfigKey current_config_key = map_to_configkey(current_base, v_splitMeta_info);
     std::vector<std::string> existed_config;
@@ -1383,7 +1388,6 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       }
       // its pscore
       std::cout << ", pscore: " << pop_scores[ite] << std::endl;
-      std::cout << std::endl;
     }
     std::cout << "[after]neighbors size: " << neighbors.size() << std::endl;
 
