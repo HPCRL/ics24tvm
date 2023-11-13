@@ -199,6 +199,7 @@ bool isConfigKeyInTable(int key) ;
   /*! \brief The cached sketches */
   Array<State> sketch_cache_;
   std::map<int, ConfigKey> unique_conf_table_;
+  bool firstround = true;
 
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
