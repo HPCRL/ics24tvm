@@ -200,6 +200,7 @@ bool isConfigKeyInTable(int key) ;
   Array<State> sketch_cache_;
   std::map<int, ConfigKey> unique_conf_table_;
   bool firstround = true;
+  std::unordered_set<std::string> visited;
 
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
