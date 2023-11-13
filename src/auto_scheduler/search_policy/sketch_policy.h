@@ -144,6 +144,8 @@ bool isConfigKeyInTable(int key) ;
   std::unordered_map<std::string, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
                                 std::vector<splitMeta*> v_splitMeta_info);
 
+  bool cuda_view(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
+
   /*!
    * \brief Perform evolutionary search.
    * \param init_populations The states generated from init population.
@@ -201,7 +203,7 @@ bool isConfigKeyInTable(int key) ;
   std::map<int, ConfigKey> unique_conf_table_;
   bool firstround = true;
   std::unordered_set<std::string> visited;
-
+  std::unordered_set<std::string> explored_base;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
 
