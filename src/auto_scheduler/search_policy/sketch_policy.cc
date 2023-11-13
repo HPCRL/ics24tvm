@@ -238,10 +238,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
     bool firsttime_random = true;
     int step = 0;
-    n_trials = 1;
+    // n_trials = 1;
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(1, &next_states, firsttime_random);
+      local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
       // std::cout << "local min num: " << local_min_best_states.size() << std::endl;
       // std::cout << "next states num: " << next_states.size() << std::endl;
       
@@ -301,43 +301,44 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         }
       }
 
-      if (!next_states.empty()){
-        track_path.push_back(next_states[0]);
+      //// --- debug for track path --- ////
+      // if (!next_states.empty()){
+      //   track_path.push_back(next_states[0]);
 
-        // next_states = search_task->compute_dag.InferBound(next_states);
-        // for (size_t i = 0; i < next_states.size(); i++) {
-        //   std::vector<splitMeta*> v_splitMeta_info;
-        //   v_splitMeta_info = GenerateSplitMeta(this, next_states[i]);
-        //   const auto state_str = state_to_string(next_states[i], v_splitMeta_info, search_task);
-        //   if (visited.count(state_str) == 0) {
-        //     visited.insert(state_str);
-        //   }
-        // }
+      //   // next_states = search_task->compute_dag.InferBound(next_states);
+      //   // for (size_t i = 0; i < next_states.size(); i++) {
+      //   //   std::vector<splitMeta*> v_splitMeta_info;
+      //   //   v_splitMeta_info = GenerateSplitMeta(this, next_states[i]);
+      //   //   const auto state_str = state_to_string(next_states[i], v_splitMeta_info, search_task);
+      //   //   if (visited.count(state_str) == 0) {
+      //   //     visited.insert(state_str);
+      //   //   }
+      //   // }
 
-        // inputs = PackState(next_states, n_trials - ct);
-        // int model_age = 1;
-        // std::vector<float> r_scores;
-        // if (!inputs.empty()) {
-        //   r_scores.reserve(inputs.size());
-        //   Array<State> measure_states;
-        //   measure_states.reserve(inputs.size());
-        //   for (size_t j = 0; j < inputs.size(); ++j) {
-        //       State tmp = inputs[j].get()->state;
-        //       measure_states.push_back(tmp);
-        //   }
-        //   program_cost_model->Predict(search_task, measure_states, &r_scores);
-        // }
-        // // Measure candidate states
-        // PrintTitle("Measure next states", verbose);
-        // // results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-        // results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+      //   // inputs = PackState(next_states, n_trials - ct);
+      //   // int model_age = 1;
+      //   // std::vector<float> r_scores;
+      //   // if (!inputs.empty()) {
+      //   //   r_scores.reserve(inputs.size());
+      //   //   Array<State> measure_states;
+      //   //   measure_states.reserve(inputs.size());
+      //   //   for (size_t j = 0; j < inputs.size(); ++j) {
+      //   //       State tmp = inputs[j].get()->state;
+      //   //       measure_states.push_back(tmp);
+      //   //   }
+      //   //   program_cost_model->Predict(search_task, measure_states, &r_scores);
+      //   // }
+      //   // // Measure candidate states
+      //   // PrintTitle("Measure next states", verbose);
+      //   // // results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+      //   // results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
         
-        // // Update measured states throughputs. These states will join the EvolutionarySearch in later
-        // // search rounds.
-        // for (const auto& res : results) {
-        //   measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
-        // }
-      }
+      //   // // Update measured states throughputs. These states will join the EvolutionarySearch in later
+      //   // // search rounds.
+      //   // for (const auto& res : results) {
+      //   //   measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+      //   // }
+      // }
 
       step++;
       if (step % 1 == 0){
@@ -1233,12 +1234,13 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
   // std::cout << "sample unique population: --------------------- " << std::endl;
   Array<State> sampled_states = SampleUniquePopulation(conf_table, sketches, v_splitMeta_info);
   for (auto s : sampled_states){
-    std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, s);
-    const auto state_str = state_to_string(s, v_splitMeta_info, search_task);
-    if (visited.count(state_str) == 0) {
-      visited.insert(state_str);
-      neighbors.push_back(s);
-    }
+    // std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, s);
+    // const auto state_str = state_to_string(s, v_splitMeta_info, search_task);
+    // if (visited.count(state_str) == 0) {
+    //   visited.insert(state_str);
+    //   neighbors.push_back(s);
+    // }
+    neighbors.push_back(s);
   }
   // std::cout << "size of sampled_states: " << sampled_states.size() << std::endl;
   return neighbors;
@@ -1264,16 +1266,19 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     
     State state;
     state = state_ite;
+    std::unordered_set<std::string> neighbors_remove_dup;
     std::unordered_map<std::string, std::vector<int>> current_base = GetSateFactor(search_task, state);
     // // insert the base state, fix in the first position
     // neighbors.push_back(state);
 
     // first round init by base state
 
-    //32 4 1 16 1 1 debugg
     if (firstround){
-      ConfigKey base = {32, 4, 1, 16, 1, 1};
-      // ConfigKey base = map_to_configkey(current_base, v_splitMeta_info);
+      // 32 4 1 16 1 1 debugg
+      // ConfigKey base = {32, 4, 1, 16, 1, 1};
+      // 2 64 8 4 64 1
+      // ConfigKey base = {2, 64, 8, 4, 64, 1};
+      ConfigKey base = map_to_configkey(current_base, v_splitMeta_info);
       // config table 
       std::map<int, ConfigKey> conf_table_base;
       conf_table_base[0] = base;
@@ -1301,15 +1306,18 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     for (auto n : direct_neighbors){
       Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
       for (auto t : tmp){
-        diagonal_neighbors.push_back(t);
+        std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, t);
+        const auto state_str = state_to_string(t, v_splitMeta_info, search_task);
+        if (neighbors_remove_dup.count(state_str) == 0) {
+          neighbors_remove_dup.insert(state_str);
+          diagonal_neighbors.push_back(t);
+        }
       }
     }
 
     for (auto n : diagonal_neighbors){
       neighbors.push_back(n);
     }
-
-    std::cout << "size of diagonal_neighbors: " << diagonal_neighbors.size() << std::endl;
 
     // Array<State> diagonal_diag_neighbors;
     // for (auto n : diagonal_neighbors){
@@ -1357,14 +1365,12 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     ConfigKey current_config_key = map_to_configkey(current_base, v_splitMeta_info);
     std::vector<std::string> existed_config;
 
-    // get pscore for neighbors
-    
+    //// --- get pscore for neighbors for tracking debug --- ////
     std::vector<float> pop_scores;
     pop_scores.reserve(neighbors.size());
     Array<State> neighbors_inf = search_task->compute_dag.InferBound(neighbors);
     PruneInvalidState(search_task, &neighbors_inf);
     program_cost_model->Predict(search_task, neighbors_inf, &pop_scores);
-    
     int ite = -1;
     for (State neighbor : neighbors) {
       ite++;
@@ -1422,7 +1428,6 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
       continue;
     }
 
-    // std::unordered_set<std::string> visited;
     std::vector<float> pop_scores;
     pop_scores.reserve(path.size());
     path = search_task->compute_dag.InferBound(path);
@@ -1453,10 +1458,18 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     float best_score = base_score;
     int best_neighbour_index = 0;
     for (int i = 1; i < pop_scores.size(); i++){
-      // std::cout << "idx : " << i << " pscore : " << pop_scores[i] << std::endl;
-      if (pop_scores[i] >= best_score){ //Yufan: should we add epsilon threshold
+      // add all path to visited set
+      std::vector<splitMeta*> v_splitMeta_info;
+      v_splitMeta_info = GenerateSplitMeta(this, path[i]);
+      const auto state_str = state_to_string(path[i], v_splitMeta_info, search_task);
+
+      //Yufan: should we add epsilon threshold
+      if (pop_scores[i] >= best_score && visited.count(state_str) == 0) {
         best_neighbour_index = i;
         best_score = pop_scores[i];
+      }
+      if (pop_scores[i] > -1e10 && visited.count(state_str) == 0) {
+        visited.insert(state_str);
       }
     }
     
@@ -1468,42 +1481,11 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     else{
       std::cout << "better than base, pscore : " << pop_scores[best_neighbour_index] << std::endl;
       std::cout << "best_neighbour_index : " << best_neighbour_index << std::endl;
-      // std::cout << "size of pop_scores : " << pop_scores.size() << std::endl;
-      // std::cout << "size of path : " << path.size() << std::endl;
-      
-      // std::cout << "path\n";
-      // for (int i = 0; i < path.size(); i++){
-      //   std::cout << "path " << i << " : \n " << path[i] << std::endl;
-      //   // std::cout << path[i] << std::endl;
-      // }
-
-      // std::cout << "path[best_neighbour_index]: \n " << path[best_neighbour_index] << std::endl;
-      
-      //debug push base every time for testing model
-      // next_states->push_back(path[0]); 
 
       next_states->push_back(path[best_neighbour_index]);   // move to better predict neighbour 
 
-      // (debug)
-      // Array<State> tmp;
-      // tmp.push_back(path[0]); 
-      // tmp.push_back(path[best_neighbour_index]);
-      // // predict next states
-      // pop_scores.clear();
-      // pop_scores.reserve(tmp.size());
-      // tmp = search_task->compute_dag.InferBound(tmp);
-      // PruneInvalidState(search_task, &tmp);
-      // // std::cout << "after PruneInvalidState : " << tmp.size() << std::endl;
-      // program_cost_model->Predict(search_task, tmp, &pop_scores);
-      // for (int i = 0; i < pop_scores.size(); i++){
-      //   std::cout << "idx : " << i << " pscore : " << pop_scores[i] << std::endl;
-      // }
-      // assert(pop_scores.size() == 2);
-      // std::cout << "path[0] score : " << pop_scores[0] << std::endl;
-      // std::cout << "path[best_neighbour_index] score : " << pop_scores[1] << std::endl;
-      // std::cout << "[NodeMove], next_states size : " << next_states->size() << std::endl;
-      // // std::cout << "next_states[0]: \n " << (*next_states)[0] << std::endl;
     }
+    
     // std::cout << "number of next_states : " << next_states->size() << std::endl;
   }
   return local_min;
@@ -1684,11 +1666,12 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   // init_population = base_population;
   // std::cout << "after prune size of init_population: " << base_population.size() << std::endl;
 
-  Array<State> base_population;
-  base_population.push_back(init_population[0]);
-  init_population = base_population;
-  assert(init_population.size() == 1);
-  PrintTitle("Generate Neighbours", verbose);
+  // //// --- debug only for one config only ---
+  // Array<State> base_population;
+  // base_population.push_back(init_population[0]);
+  // init_population = base_population;
+  // assert(init_population.size() == 1);
+  // PrintTitle("Generate Neighbours", verbose);
 
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
 
