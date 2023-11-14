@@ -244,7 +244,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     // n_trials = 1;
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(1, &next_states, firsttime_random);
+      local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
       
       if (next_states.empty()){
         firsttime_random = true;
@@ -259,7 +259,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         v_splitMeta_info = GenerateSplitMeta(this, local_min_best_states[0]);
         std::string state_str = state_to_string(local_min_best_states[0], v_splitMeta_info, search_task);
         if (measured_states_set_.count(state_str)){// measured
-          visited.clear();
           if (empty_retry_count-- > 0) {
             std::cout << "count of empty_retry_count: " << empty_retry_count << std::endl;
             continue;
@@ -279,12 +278,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           int random_idx = rand_gen() % tmp.size();
           local_min_set.push_back(tmp[random_idx]);
         }
-        visited.clear();
         for (auto localmin : local_min_best_states){
           local_min_set.push_back(localmin);
         }
       }
-      if (local_min_set.size() > 10){
+      if (local_min_set.size() > 63){
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
         inputs = PackState(local_min_set, n_trials - ct);
         local_min_set.clear();
@@ -1382,11 +1380,14 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
       const auto state_str = state_to_string(path[i], v_splitMeta_info, search_task);
 
       //Yufan: should we add epsilon threshold
-      if (pop_scores[i] >= best_score && visited.count(state_str) == 0) {
+      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score && visited.count(state_str) == 0) {
         best_neighbour_index = i;
         best_score = pop_scores[i];
+        visited.insert(state_str);
       }
-      if (pop_scores[i] > -1e10 && visited.count(state_str) == 0) {
+      if (pop_scores[i] > -1e10 && pop_scores[i] == best_score && visited.count(state_str) == 0) {
+        // path[i] should be added to next_states
+        next_states->push_back(path[i]);
         visited.insert(state_str);
       }
     }
@@ -1541,6 +1542,8 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
       if(explored_base.count(state_str) == 0) {
         explored_base.insert(state_str);
         base_population.push_back(state);
+      }
+      if (num_random_states-- == 0){
         break;
       }
     }
