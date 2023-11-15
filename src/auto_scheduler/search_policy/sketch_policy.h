@@ -176,8 +176,6 @@ bool isConfigKeyInTable(int key) ;
   
   Array<State> GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
-  Array<State> GetDiagonalNeighbors(State state, std::unordered_map<std::string, std::vector<int>> pz_factors);
-
   std::unordered_map<std::string, std::vector<int>> GetSateFactor(const SearchTask& task, const State& state);
 
   Array<State> SampleUniquePopulation(std::map<int, ConfigKey> conf_table, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
@@ -202,8 +200,8 @@ bool isConfigKeyInTable(int key) ;
   Array<State> sketch_cache_;
   std::map<int, ConfigKey> unique_conf_table_;
   bool firstround = true;
+  int num_failed_local_search_;
   std::unordered_set<std::string> visited;
-  std::unordered_set<std::string> explored_base;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
 
