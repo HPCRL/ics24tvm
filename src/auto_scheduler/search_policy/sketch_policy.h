@@ -137,6 +137,8 @@ bool isConfigKeyInTable(int key) ;
    */
   Array<State> SampleInitPopulation(const Array<State>& sketches);
 
+  Array<State> SampleCUDAPopulation(const Array<State>& sketches, int num_required);
+
   std::vector<splitMeta*> GenerateSplitMeta(SketchPolicyNode* policy, State state);
 
   std::string state_to_string(const State& state, std::vector<splitMeta*> v_splitMeta_info, const SearchTask& task);
@@ -144,7 +146,7 @@ bool isConfigKeyInTable(int key) ;
   std::unordered_map<std::string, std::vector<int>> GetFactorInfo(SketchPolicyNode* policy, State* state, 
                                 std::vector<splitMeta*> v_splitMeta_info);
 
-  bool cuda_view(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
+  bool cuda_view(const State& state, std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
 
   /*!
    * \brief Perform evolutionary search.
@@ -176,7 +178,7 @@ bool isConfigKeyInTable(int key) ;
   
   Array<State> GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
-  std::unordered_map<std::string, std::vector<int>> GetSateFactor(const SearchTask& task, const State& state);
+  std::unordered_map<std::string, std::vector<int>> GetStateFactor(const SearchTask& task, const State& state);
 
   Array<State> SampleUniquePopulation(std::map<int, ConfigKey> conf_table, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   /*!

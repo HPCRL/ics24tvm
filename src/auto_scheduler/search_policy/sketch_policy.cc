@@ -237,15 +237,17 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<State> local_min_best_states, track_path;
     Array<State> local_min_set;
 
-    // TODO(Chendi): record all local min states, then do measurement to avoid warp-up issue.
+    // TODO(Chendi): record all local min states, then do measurement to avoid warm-up issue.
 
     bool firsttime_random = true;
     int max_num_for_measure = 8;
-    int measure_threashold = max_num_for_measure;
+    int measure_threshold = max_num_for_measure;
     num_failed_local_search_ = 0;
+    int init_num = 16;
+
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(16, &next_states, firsttime_random);
+      local_min_best_states = SearchOneRoundPruePredict(init_num, &next_states, firsttime_random);
       
       if (next_states.empty()){
         firsttime_random = true;
@@ -265,8 +267,9 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
             count_duplicate++;
           }
           else{ // otherwise, add to local_min_set for measurement
-            Array<State> tmp = SampleInitPopulation(sketch_cache_);
-            if (local_min_set.size() == 0 && tmp.size() > 1){// push track path to warp up
+            Array<State> tmp = SampleCUDAPopulation(sketch_cache_, 2);
+            // TODO(Chendi): here we only push one random state to warm up, can we use other way without measure any random states?
+            if (local_min_set.size() == 0 && tmp.size() > 1){// push track path to warm up
               int random_idx = rand_gen() % tmp.size();
               local_min_set.push_back(tmp[random_idx]);
             }
@@ -275,15 +278,16 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         }
       }
 
-      std::cout << "size of local_min_set: " << local_min_set.size() << std::endl;
-      if (local_min_set.size() > measure_threashold){ // once local_min_set size > 63, do measurement
-        // reset the measure_threashold once we have measured some states
-        measure_threashold = max_num_for_measure;
+      std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
+      if (static_cast<int>(local_min_set.size()) > measure_threshold || local_min_set.size() + ct >= n_trials){ // once local_min_set is large enough, measure them
+        // reset the measure_threshold once we have measured some states
+        measure_threshold = max_num_for_measure;
         // reset empty_retry_count
         empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
 
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
-        inputs = PackState(local_min_set, n_trials - ct); // TODO: (Chendi)here local_min_set has no duplicate, should be safe to directly measure, remove measured_states_set_ check
+        // TODO: (Chendi)here local_min_set has no duplicate, should be safe to directly measure, remove measured_states_set_ check
+        inputs = PackState(local_min_set, n_trials - ct);
         local_min_set.clear();
 
         int model_age = 1;
@@ -307,16 +311,16 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       }
 
       // Stop if hit too many same local min states
-      std::cout << "number of measurement threshold: " << measure_threashold << std::endl;
-      std::cout << "rest sequential failed count before early stop : " << empty_retry_count << std::endl;
-      std::cout << "number of failed local min search: " << num_failed_local_search_ << std::endl;
+      std::cout << "Number of measurement threshold: " << measure_threshold << std::endl;
+      std::cout << "Rest sequential failed count before early stop : " << empty_retry_count << std::endl;
+      std::cout << "Number of failed local min search: " << num_failed_local_search_ << std::endl;
       if (num_failed_local_search_ != 0){
         // check if too many sequantial failed or local_min_set has no local min states to measure, early stop
         if (empty_retry_count - num_failed_local_search_ > 0 || local_min_set.size() > 0){
-          // too many measured states, reduce the measure_threashold
+          // too many measured states, reduce the measure_threshold
           // in case we can't get enough states in local_min_set, decrease the measure threshold to at lease measure some states
           empty_retry_count -= num_failed_local_search_;
-          measure_threashold -= num_failed_local_search_;
+          measure_threshold -= num_failed_local_search_;
           num_failed_local_search_ = 0;
           continue;
         } else {
@@ -500,7 +504,7 @@ ConfigKey SketchPolicyNode::map_to_configkey(std::unordered_map<std::string, std
   return config_key;
 }
 
-std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetSateFactor(const SearchTask& task, const State& state){
+std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetStateFactor(const SearchTask& task, const State& state){
   std::vector<splitMeta*> v_splitMeta_info;
   v_splitMeta_info = GenerateSplitMeta(this, state);
   State ret_state;
@@ -870,7 +874,7 @@ std::map<int, ConfigKey> SketchPolicyNode::GenerateUniquetable(SketchPolicyNode*
 *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
 *  @return: neighbors states table
 */
-// TODO(Chendi): reuse the code in GetSateFactor() and state_to_string()
+// TODO(Chendi): reuse the code in GetStateFactor() and state_to_string()
 Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info){
   // per state extract tile size vector
   // <G, T, R, ...
@@ -883,7 +887,7 @@ Array<State> SketchPolicyNode::GetDirectNeighbors(State state, std::unordered_ma
   std::vector<ConfigKey> neighbors_config_key;
 
 
-  std::unordered_map<std::string, std::vector<int>> current_config = GetSateFactor(search_task, state);
+  std::unordered_map<std::string, std::vector<int>> current_config = GetStateFactor(search_task, state);
 
   neighbors_config_key = UpDownMutate(current_config, pz_factors, v_splitMeta_info);
   
@@ -918,12 +922,12 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     State state; // current base
     state = state_ite;
     std::unordered_set<std::string> neighbors_remove_dup;
-    std::unordered_map<std::string, std::vector<int>> current_base = GetSateFactor(search_task, state);
+    std::unordered_map<std::string, std::vector<int>> current_base = GetStateFactor(search_task, state);
     // // insert the base state, fix in the first position
     // neighbors.push_back(state);
 
     // first round init by base state
-
+    firstround = false; // Chendi: do we need to start from cuda view?
     if (firstround){
       ConfigKey base = map_to_configkey(current_base, v_splitMeta_info);
       // config table 
@@ -970,82 +974,6 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       neighbors.push_back(n);
     }
 
-    // Array<State> diagonal_diag_neighbors;
-    // for (auto n : diagonal_neighbors){
-    //   Array<State> tmp = GetDirectNeighbors(n, pz_factors, sketches, v_splitMeta_info);
-    //   for (auto t : tmp){
-    //     diagonal_diag_neighbors.push_back(t);
-    //   }
-    // }
-
-    // for (auto n : diagonal_diag_neighbors){
-    //   neighbors.push_back(n);
-    // }
-
-    // //remove duplicates
-    // for (int i = 0; i < neighbors.size(); i++){
-    //   for (int j = i + 1; j < neighbors.size(); j++){
-    //     if (state_to_string(neighbors[i], v_splitMeta_info, search_task) == state_to_string(neighbors[j], v_splitMeta_info, search_task)){
-    //       // std::cout << "erase duplicate: state " << neighbors[j] << std::endl;
-    //       neighbors.erase(neighbors.begin() + j);
-    //       j--;
-    //     }
-    //   }
-    // }
-
-    // // remove duplicates
-    // Array<State> tmp;
-    // for (int i = 0; i < neighbors.size(); i++){
-    //   bool flag = true;
-    //   for (int j = 0; j < tmp.size(); j++){
-    //     if (state_to_string(neighbors[i], v_splitMeta_info, search_task) == state_to_string(tmp[j], v_splitMeta_info, search_task)){
-    //       flag = false;
-    //       break;
-    //     }
-    //   }
-    //   if (flag){
-    //     tmp.push_back(neighbors[i]);
-    //   }
-    // }
-    // neighbors = tmp;
-
-
-
-
-    // //// --- get pscore for neighbors for tracking debug --- ////
-    // std::vector<std::string> existed_config;
-    // std::vector<float> pop_scores;
-    // pop_scores.reserve(neighbors.size());
-    // Array<State> neighbors_inf = search_task->compute_dag.InferBound(neighbors);
-    // PruneInvalidState(search_task, &neighbors_inf);
-    // program_cost_model->Predict(search_task, neighbors_inf, &pop_scores);
-    // int ite = -1;
-    // // std::cout << "neighbors size : " << neighbors.size() << "\n";
-    // for (State neighbor : neighbors) {
-    //   ite++;
-    //   std::unordered_map<std::string, std::vector<int>> current_neighbor = GetSateFactor(search_task, neighbor);
-    //   // map_to_configkey
-    //   ConfigKey current_neighbor_key = map_to_configkey(current_neighbor, v_splitMeta_info);
-    //   // std::cout << "current_neighbor_key size : " << current_neighbor_key.size() << std::endl;
-    //   for (int i = 0; i < current_neighbor_key.size() ; i++){
-    //     std::cout << current_neighbor_key[i] << " ";
-    //   }
-      
-    //   // stash into existed_config
-    //   std::vector<float> existed_config_pop_scores;
-    //   if (std::find(existed_config.begin(), existed_config.end(), conf2string(current_neighbor_key)) != existed_config.end()){
-    //     std::cout << "existed_config contains current_neighbor_key" << std::endl;
-    //     continue; 
-    //   }
-    //   else{
-    //     existed_config.push_back(conf2string(current_neighbor_key));
-    //     existed_config_pop_scores.push_back(pop_scores[ite]);
-    //   }
-    //   // its pscore
-    //   std::cout << ", pscore: " << pop_scores[ite] << std::endl;
-    // }
-    // std::cout << "[after]neighbors size: " << neighbors.size() << std::endl;
-
     neighbour_table.push_back(neighbors);
   }
 
@@ -1087,7 +1015,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
 
     // -inf
     if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()){
-      std::cout << "no neighbor, invalid" << std::endl;
+      std::cout << "No neighbor, invalid" << std::endl;
       continue;
     }
     
@@ -1121,12 +1049,12 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     // local min or not
     if (best_neighbour_index == 0){
       if (real_local_min){ // no absolute better pscore neighbor, real local min
-        std::cout << "best is current: pscore : " << pop_scores[0] << std::endl;
+        // std::cout << "best is current: pscore : " << pop_scores[0] << std::endl;
         local_min.push_back(path[0]);     // send out local_min to measure
 
         // may have equal pscore neighbors
         // in case we miss any near boundary states, equal best pscore states should also be explored
-        std::cout << "number of neighbors : " << pop_scores.size() - 1 << std::endl;
+        // std::cout << "number of neighbors : " << pop_scores.size() - 1 << std::endl;
         for (int i = 0; i < pop_scores.size(); i++){
           // std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << std::endl;
           std::vector<splitMeta*> v_splitMeta_info;
@@ -1137,25 +1065,25 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
 
           // add unvisited equal pscore states to next_states
           if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) == 0) {
-            std::cout << "idx : " << i << ", equal best pscore : " << pop_scores[i] << " should also be explored" << std::endl;
+            // std::cout << "idx : " << i << ", equal best pscore : " << pop_scores[i] << " should also be explored" << std::endl;
             // add all next_states to visited, avoid circular
             visited.insert(state_str);
             next_states->push_back(path[i]);
           }
           // print visited equal pscore states
           if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) != 0){
-            std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << " has been visited" << std::endl;
+            // std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << " has been visited" << std::endl;
           }
         }
       }
       else{// has absolute better neighbors, not real local min, best_neighbour_index == 0 because better pscore state has been visited
         // count as a failure: can't find unvisited local min
         num_failed_local_search_++;
-        std::cout << "[failed] can't find unvisited local min, and current base is not local min" << std::endl;
+        // std::cout << "[FAILED] can't find unvisited local min, and current base is not local min" << std::endl;
       }
     }
     else{
-      std::cout << "better than current, pscore : " << pop_scores[best_neighbour_index] << std::endl;
+      // std::cout << "Found neighbor better than current, pscore : " << pop_scores[best_neighbour_index] << std::endl;
       // std::cout << "best_neighbour_index : " << best_neighbour_index << std::endl;
 
       std::vector<splitMeta*> v_splitMeta_info;
@@ -1167,7 +1095,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
       next_states->push_back(path[best_neighbour_index]);   // move to better predict neighbour 
     }
   }
-  std::cout << "number of next_states : " << next_states->size() << std::endl;
+  // std::cout << "Number of next_states : " << next_states->size() << std::endl;
   return local_min;
 }
 
@@ -1217,26 +1145,6 @@ std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorIn
   int max_innermost_split_factor =
       GetIntParam(policy->params, SketchParamKey::max_innermost_split_factor);
 
-  // int tiling_level = 2;
-  // std::unordered_map<int, Array<Array<Integer>>> full_factor_list;
-  // int i = 0;
-  // for (auto sm : v_splitMeta_info){
-  //   if (sm->parallel) {
-  //     auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
-  //     full_factor_list[i] = fact_schem;
-  //     i++;
-  //   } else {
-  //     // non-parallel
-  //     tiling_level = 1;
-  //     auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
-  //     full_factor_list[i] = fact_schem;
-  //     i++;
-  //   }
-  // }
-
-  // int idx = 0;
-  // int depth = i;
-  // std::vector<Array<Integer>> current_config;
 
   // get factor list for each dimension using GetFactorizationSchemes
   
@@ -1289,13 +1197,11 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   
   PrintTitle("Generate Base States", verbose);
-  // TODO(Chendi): just use next_states.empty() to check if we need to re-sample init population
   // base states in the init population
   Array<State> init_population;
   if (firsttime_random){
     // 2. Sample the init population
-    PrintTitle("Sample Init Population", verbose);
-    init_population = SampleInitPopulation(sketch_cache_);
+    init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
 
     // push num_random_states random states into init_population as start point
     Array<State> base_population;
@@ -1312,13 +1218,6 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     }
     init_population = base_population;
 
-    // Chendi: we should use the measured states with the highest throughput in dynamic model
-    //         But for neighbor search, all measured states are local minimums, so just skip it for now.
-    // std::vector<int> indices = Argsort(measured_states_throughputs_);
-    // for (int i = 0; i < num_random_states; i++) {
-    //   init_population.push_back(measured_states_vector_[indices[i]]);
-    // }
-
     // TODO: (Chendi) Need to sample more random states to avoid local minimums
 
     // Yufan :: think about prue random??
@@ -1332,20 +1231,6 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
       init_population.push_back(s);
     }
   }
-
-  // // apply prune using extract_features
-  // Array<State> base_population;
-  // std::cout << "before prune size of init_population: " << init_population.size() << std::endl;
-  // for (auto state : init_population){
-  //   // valid tuple create for prune
-  //   int a, b, c, d;
-  //   std::vector<float> features_extracted;
-  //   std::tie(a, b, c, d) = extract_features(this->search_task, state, v_splitMeta_info, &features_extracted);
-  //   if (a!=-1) base_population.push_back(state);
-  // }
-  // init_population = base_population;
-  // std::cout << "after prune size of init_population: " << base_population.size() << std::endl;
-
   
   assert(init_population.size() == 1);
   // std::cout << "init_population size: " << init_population.size() << std::endl;
@@ -1430,19 +1315,9 @@ Array<State> SketchPolicyNode::GenerateSketches() {
 
 Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> conf_table, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info) {
   // Use this population as the parallel degree to do sampling
-  // std::map<int, ConfigKey> conf_table;
   
   int population = conf_table.size();
 
-  // std::cout << " [SampleUniquePopulation] conf_table size: " << conf_table.size() << " table: " << std::endl;
-  // for (auto c : conf_table){
-  //   std::cout << c.first << " ";
-  //   for (auto cc : c.second){
-  //     std::cout << cc << " ";
-  //   }
-  //   std::cout << std::endl;
-  // } 
-  // std::cout << "size of the conf_table: " << population << std::endl;
   assert(sketches.size() == 1); 
 
   State tmp_s = sketches[0]; // TODO: make muiltple sketch work later
@@ -1468,7 +1343,6 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     split_id.push_back(sm->step_id);
   }
   support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens, &conf_table, &split_id](int index) {
-      // std::cout << "index: " << index << std::endl;
     // Apply random annotation rules one by one
     bool valid = true;
     InitFillTileSizeUnique cust_rule;
@@ -1480,10 +1354,6 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
 
 
     ConfigKey tile_config = conf_table[index];
-    // std::cout << "tile_config size: " << tile_config.size() << std::endl;
-    // for (auto c : tile_config){
-    //   std::cout << c << " ";
-    // }
 
     State tmp_s = sketches[0];  // TODO: make muiltple sketch work later
     
@@ -1552,11 +1422,12 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
 }
 
 // we prefer sample from cuda view, so we need to check if the current config is cuda view prefer
-bool SketchPolicyNode::cuda_view(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info){
+bool SketchPolicyNode::cuda_view(const State& state, std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info){
   int max_innermost_split_factor = GetIntParam(this->params, SketchParamKey::max_innermost_split_factor);
 
   ConfigKey config_key;
   // std::cout << "size of v_splitMeta_info: " << v_splitMeta_info.size() << std::endl;
+  int total_tb_size = 1;
   for (auto spm : v_splitMeta_info) {
     // std::cout << "spm : " << *spm << std::endl;
     if (spm->parallel == 1) {// filter tb size for parallel dims
@@ -1568,6 +1439,7 @@ bool SketchPolicyNode::cuda_view(std::unordered_map<std::string, std::vector<int
       if (tile_conf[1] > max_innermost_split_factor){
         return false;
       }
+      total_tb_size *= tb;
       // (Chendi)further prune?
     } else {// and filter inner_outer for reduce dims
       int outer_SM = spm->tile_sizes[0];
@@ -1580,18 +1452,18 @@ bool SketchPolicyNode::cuda_view(std::unordered_map<std::string, std::vector<int
       }
       // (Chendi)further prune?
     }
-    // if (spm == v_splitMeta_info.end()[-1]) {
-    //   std::cout << "last spm : " << *spm << std::endl;
-    //   continue;
-    // }
+  }
+  if (total_tb_size > 1024 || total_tb_size < 32){
+    return false;
   }
   return true;
 }
 
-Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
+Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches, int num_required) {
+  PrintTitle("Sample CUDA View Population", verbose);
   // Use this population as the parallel degree to do sampling
-  // int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
-  int population = 500;
+  int population = num_required;
+  sample_init_min_pop_ = num_required;
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
   int fail_ct = 0;
@@ -1651,16 +1523,105 @@ Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches
       for (size_t i = 0; i < cand_states.size(); i++) {
         std::vector<splitMeta*> v_splitMeta_info;
         v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
-        // for (auto sm : v_splitMeta_info){
-        //   std::cout << *sm << std::endl;
-        // }
         const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
-        // std::cout << "idx : " << i << " state_str : " << state_str << " pop_scores[i] : " << pop_scores[i] << std::endl;
-        // std::unordered_map<std::string, std::vector<int>> current_config = GetSateFactor(search_task, cand_states[i]);
-        // if (!cuda_view(current_config, v_splitMeta_info)){
-        //   continue;
-        // }
-        if (pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0) {
+        std::unordered_map<std::string, std::vector<int>> current_config = GetStateFactor(search_task, cand_states[i]);
+        if (cuda_view(cand_states[i], current_config, v_splitMeta_info) && pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0 && visited.count(state_str) == 0) {
+          explored_state_strs.insert(state_str);
+          out_states.push_back(std::move(cand_states[i]));
+          unchange_cnt = 0;  // Reset the counter once we found a valid state
+        } else {
+          fail_ct++;
+        }
+      }
+    }
+
+    if (iter % 50 == 0) {
+      double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
+                            std::chrono::high_resolution_clock::now() - tic_begin)
+                            .count();
+      StdCout(verbose) << "Sample Iter: " << iter << std::fixed << std::setprecision(4)
+                       << "\t#Pop: " << out_states.size() << "\t#Target: " << sample_init_min_pop_
+                       << "\tfail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
+                       << std::setprecision(2) << duration << std::endl;
+    }
+
+    iter++;
+  }
+
+  double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
+                        std::chrono::high_resolution_clock::now() - tic_begin)
+                        .count();
+  StdCout(verbose) << "Sample \t#s: " << out_states.size()
+                   << "\tfail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
+                   << std::setprecision(2) << duration << std::endl;
+  return out_states;
+}
+
+Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
+  PrintTitle("Sample Initial Population", verbose);
+  // Use this population as the parallel degree to do sampling
+  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  auto tic_begin = std::chrono::high_resolution_clock::now();
+
+  int fail_ct = 0;
+  Array<State> out_states;
+  std::vector<std::mt19937> rand_gens;
+  rand_gens.reserve(population);
+  for (int i = 0; i < population; i++) {
+    rand_gens.push_back(std::mt19937(rand_gen()));
+  }
+
+  std::unordered_set<std::string> explored_state_strs;
+  size_t iter = 1;
+  size_t unchange_cnt = 0;
+  while (static_cast<int>(out_states.size()) < sample_init_min_pop_) {
+    std::vector<State> temp_states(population);
+
+    // Sample a batch of states randomly
+    // TODO(Chendi): apply capacity prune here
+    support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens](int index) {
+      // Randomly choose a sketch
+      State tmp_s = sketches[(rand_gens[index])() % sketches.size()];
+      // Apply random annotation rules one by one
+      bool valid = true;
+      for (const auto& rule : init_rules) {
+        if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
+            PopulationGenerationRule::ResultKind::kInvalid) {
+          valid = false;
+          break;
+        }
+      }
+      if (valid) {
+        temp_states[index] = std::move(tmp_s);
+      }
+    });
+
+    // Filter out the states that were failed to apply initial rules
+    Array<State> cand_states;
+    for (auto tmp_s : temp_states) {
+      if (tmp_s.defined()) {
+        cand_states.push_back(std::move(tmp_s));
+      } else {
+        fail_ct++;
+      }
+    }
+
+    unchange_cnt++;
+    if (!cand_states.empty()) {
+      // Run the cost model to make filter out states that failed to extract features.
+      // This may happen due to illegal schedules or the schedules that uses too much
+      // memory on GPU.
+      std::vector<float> pop_scores;
+      pop_scores.reserve(cand_states.size());
+      cand_states = search_task->compute_dag.InferBound(cand_states);
+      PruneInvalidState(search_task, &cand_states);
+      program_cost_model->Predict(search_task, cand_states, &pop_scores);
+
+      for (size_t i = 0; i < cand_states.size(); i++) {
+        std::vector<splitMeta*> v_splitMeta_info;
+        v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
+        const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
+        if (pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0 && visited.count(state_str) == 0) {
           explored_state_strs.insert(state_str);
           out_states.push_back(std::move(cand_states[i]));
           unchange_cnt = 0;  // Reset the counter once we found a valid state
@@ -2050,6 +2011,7 @@ std::string SketchPolicyNode::state_to_string(const State& state, std::vector<sp
     // }
   }
   // std::cout << "res = " << res << std::endl;
+  // std::cout << "its state\n" << state << std::endl;
   return res;
 }
 
