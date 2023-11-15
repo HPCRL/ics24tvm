@@ -237,13 +237,13 @@ class XGBModel(PythonBasedModel):
         if tvm_home is None:
             raise RuntimeError("TVM_HOME environment variable is not set")
         else:
-            model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "model.json")
+            model_file = os.path.join(os.path.join(tvm_home, "build"), "model.json")
             bst = xgb.Booster()
             bst.load_model(model_file)
 
             # # load model for testing 1024 matmul :xgb_uniform_model_for_test_set_1024.pkl
             # import pickle
-            # model_file = os.path.join(os.path.join(tvm_home, "yy_test/gen_model"), "xgb_model_test_set_4_1k.pkl")
+            # model_file = os.path.join(os.path.join(tvm_home, "build"), "xgb_model_test_set_4_1k.pkl")
             # bst = pickle.load(open(model_file, "rb"))
             
             # print("Model loaded from: ", model_file, flush=True)
