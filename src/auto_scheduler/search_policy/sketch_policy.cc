@@ -259,6 +259,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       int count_duplicate = 0;
       // std::cout << "size of local_min_best_states: " << local_min_best_states.size() << std::endl;
       if (!local_min_best_states.empty()){
+        measure_threshold = max_num_for_measure;
         for (auto localmin : local_min_best_states){
           std::vector<splitMeta*> v_splitMeta_info;
           v_splitMeta_info = GenerateSplitMeta(this, localmin);
@@ -280,11 +281,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
       std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       if (static_cast<int>(local_min_set.size()) > measure_threshold || local_min_set.size() + ct >= n_trials){ // once local_min_set is large enough, measure them
-        // reset the measure_threshold once we have measured some states
-        measure_threshold = max_num_for_measure;
-        // reset empty_retry_count
-        empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
-
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
         // TODO: (Chendi)here local_min_set has no duplicate, should be safe to directly measure, remove measured_states_set_ check
         inputs = PackState(local_min_set, n_trials - ct);
@@ -301,12 +297,15 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
               measure_states.push_back(tmp);
           }
           program_cost_model->Predict(search_task, measure_states, &r_scores);
+          // Measure candidate states
+          PrintTitle("Measure Local MIN", verbose);
+          // results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+          // reset the measure_threshold once we have measured some states
+          measure_threshold = max_num_for_measure;
+          // reset empty_retry_count
+          empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
         }
-
-        // Measure candidate states
-        PrintTitle("Measure Local MIN", verbose);
-        // results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-        results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
         ct += inputs.size();
       }
 
