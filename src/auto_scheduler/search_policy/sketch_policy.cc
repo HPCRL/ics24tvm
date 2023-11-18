@@ -268,12 +268,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
             count_duplicate++;
           }
           else{ // otherwise, add to local_min_set for measurement
-            Array<State> tmp = SampleCUDAPopulation(sketch_cache_, 2);
-            // TODO(Chendi): here we only push one random state to warm up, can we use other way without measure any random states?
-            if (local_min_set.size() == 0 && tmp.size() > 1){// push track path to warm up
-              int random_idx = rand_gen() % tmp.size();
-              local_min_set.push_back(tmp[random_idx]);
-            }
+            // Array<State> tmp = SampleCUDAPopulation(sketch_cache_, 2);
+            // // TODO(Chendi): here we only push one random state to warm up, can we use other way without measure any random states?
+            // if (local_min_set.size() == 0 && tmp.size() > 1){// push track path to warm up
+            //   int random_idx = rand_gen() % tmp.size();
+            //   local_min_set.push_back(tmp[random_idx]);
+            // }
             local_min_set.push_back(localmin);
           }
         }
@@ -1070,9 +1070,9 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
             next_states->push_back(path[i]);
           }
           // print visited equal pscore states
-          if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) != 0){
-            // std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << " has been visited" << std::endl;
-          }
+          // if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) != 0){
+          //   // std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << " has been visited" << std::endl;
+          // }
         }
       }
       else{// has absolute better neighbors, not real local min, best_neighbour_index == 0 because better pscore state has been visited
