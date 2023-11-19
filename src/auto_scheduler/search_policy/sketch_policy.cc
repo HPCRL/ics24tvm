@@ -278,6 +278,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           }
         }
       }
+      else{
+        // std::cout << "No local min found" << std::endl;
+        num_failed_local_search_++;
+      }
 
       std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       if (static_cast<int>(local_min_set.size()) > measure_threshold || local_min_set.size() + ct >= n_trials){ // once local_min_set is large enough, measure them
@@ -1075,11 +1079,11 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
           // }
         }
       }
-      else{// has absolute better neighbors, not real local min, best_neighbour_index == 0 because better pscore state has been visited
-        // count as a failure: can't find unvisited local min
-        num_failed_local_search_++;
-        // std::cout << "[FAILED] can't find unvisited local min, and current base is not local min" << std::endl;
-      }
+      // else{// has absolute better neighbors, not real local min, best_neighbour_index == 0 because better pscore state has been visited
+      //   // count as a failure: can't find unvisited local min
+      //   num_failed_local_search_++;
+      //   // std::cout << "[FAILED] can't find unvisited local min, and current base is not local min" << std::endl;
+      // }
     }
     else{
       // std::cout << "Found neighbor better than current, pscore : " << pop_scores[best_neighbour_index] << std::endl;
