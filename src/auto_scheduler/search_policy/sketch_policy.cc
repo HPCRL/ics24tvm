@@ -309,6 +309,14 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           measure_threshold = max_num_for_measure;
           // reset empty_retry_count
           empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
+
+          auto t_begin = std::chrono::high_resolution_clock::now();
+
+          // Retrain the cost model before the next search round
+          PrintTitle("Train cost model", verbose);
+          program_cost_model->Update(inputs, results);
+
+          PrintTimeElapsed(t_begin, "training", verbose);
         }
         ct += inputs.size();
       }
