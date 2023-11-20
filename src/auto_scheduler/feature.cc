@@ -1492,36 +1492,24 @@ void GetPerStoreFeatureName(int max_n_bufs, std::vector<std::string>* ret) {
   // section total : 3
 }
 
-int getSM() {
-    int deviceCount;
-    cudaError_t error = cudaGetDeviceCount(&deviceCount);
+int getSM() { // TODO: (Chendi) may need to check if user already set env variable for GPU
+  cudaDeviceProp deviceProp;
+  cudaError_t err = cudaGetDeviceProperties(&deviceProp, 0);
+  if (err != cudaSuccess) {
+    std::cout << "cudaGetDeviceProperties returned error code " << err << std::endl;
+    exit(-1);
+  }
+  return deviceProp.multiProcessorCount;
+}
 
-    if (error != cudaSuccess) {
-        std::cerr << "Error getting device count: " << cudaGetErrorString(error) << std::endl;
-        return -1;
-    }
-
-    if (deviceCount == 0) {
-        std::cerr << "No CUDA devices found." << std::endl;
-        return -1;
-    }
-
-    cudaDeviceProp deviceProperties;
-    cudaGetDeviceProperties(&deviceProperties, 0);
-
-    std::string deviceName = deviceProperties.name;
-
-    if (deviceName.find("RTX 3090") != std::string::npos) {
-        return 82;
-    } else if (deviceName.find("A6000") != std::string::npos) {
-        return 84;
-    } else if (deviceName.find("A100") != std::string::npos) {
-        return 108;
-    } else if (deviceName.find("RTX 2080 Ti") != std::string::npos) {
-        return 68;
-    } else {
-        return 68;
-    }
+int getMaxSharedMem() {
+  int maxDynamicSharedMemorySize;
+  cudaError_t err = cudaDeviceGetAttribute(&maxDynamicSharedMemorySize, cudaDevAttrMaxSharedMemoryPerBlockOptin, 0);
+  if (err != cudaSuccess) {
+    std::cout << "cudaDeviceGetAttribute returned error code " << err << std::endl;
+    exit(-1);
+  }
+  return maxDynamicSharedMemorySize;
 }
 
 struct ParallelDataStruct {
@@ -2395,7 +2383,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   totalReuse = 1.0/totalReuse;
   int num_sm = getSM();
-  // std::cout << "\nThe GPU's SM number is " << num_sm << std::endl;
 
   float wave_fac = grid_size*1.0/num_sm;
   float wave = std::ceil(wave_fac);
@@ -2440,7 +2427,13 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
   }
+
   if (totalReg > 256){
+    return std::make_tuple(-1, -1, -1, -1);
+  }
+
+  int maxDynamicSharedMemorySize = getMaxSharedMem();
+  if (totalShared > maxDynamicSharedMemorySize){
     return std::make_tuple(-1, -1, -1, -1);
   }
 
