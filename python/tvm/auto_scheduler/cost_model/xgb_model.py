@@ -199,7 +199,6 @@ class XGBModel(PythonBasedModel):
         dtrain = pack_sum_xgbmatrix(
             features, normalized_throughputs, task_ids, normalized_throughputs
         )
-        print(f"debug: size of the dtrain = {len(dtrain)}", flush=True)
 
         # train xgb model
         self.bst = xgb.train(

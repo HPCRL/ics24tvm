@@ -1030,7 +1030,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
 
     // -inf
     if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()){
-      std::cout << "No neighbor, invalid" << std::endl;
+      // std::cout << "Invalid and no neighbors" << std::endl;
       continue;
     }
     
