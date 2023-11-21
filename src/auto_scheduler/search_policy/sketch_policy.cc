@@ -48,7 +48,7 @@
 #include "sketch_policy_rules.h"
 #include "sketch_analysis.h"
 #include <assert.h>
-
+#include <climits>
 
 namespace tvm {
 namespace auto_scheduler {
@@ -240,7 +240,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     // TODO(Chendi): record all local min states, then do measurement to avoid warm-up issue.
 
     bool firsttime_random = true;
-    int max_num_for_measure = 8;
+    int max_num_for_measure = 64;
     int measure_threshold = max_num_for_measure;
     num_failed_local_search_ = 0;
     int init_num = 16;
@@ -259,6 +259,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       int count_duplicate = 0;
       // std::cout << "size of local_min_best_states: " << local_min_best_states.size() << std::endl;
       if (!local_min_best_states.empty()){
+        // reset empty_retry_count and measure_threshold
+        empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
         measure_threshold = max_num_for_measure;
         for (auto localmin : local_min_best_states){
           std::vector<splitMeta*> v_splitMeta_info;
@@ -331,7 +333,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           // too many measured states, reduce the measure_threshold
           // in case we can't get enough states in local_min_set, decrease the measure threshold to at lease measure some states
           empty_retry_count -= num_failed_local_search_;
-          measure_threshold -= num_failed_local_search_;
+          measure_threshold -= 1;
           num_failed_local_search_ = 0;
           continue;
         } else {
@@ -656,7 +658,9 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(std::unordered_map<std::st
   std::vector<ConfigKey> neighbors_config_key;
 
   //up-down mutate for tb or reg, push into the neighbors_config_key
-  int max_innermost_split_factor = GetIntParam(this->params, SketchParamKey::max_innermost_split_factor);
+  // int max_innermost_split_factor = GetIntParam(this->params, SketchParamKey::max_innermost_split_factor);
+  // use INT_MAX to disable it temporarily
+  int max_innermost_split_factor = INT_MAX;
 
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
   for (auto sm : v_splitMeta_info){
@@ -1434,35 +1438,29 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
 
 // we prefer sample from cuda view, so we need to check if the current config is cuda view prefer
 bool SketchPolicyNode::cuda_view(const State& state, std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info){
-  int max_innermost_split_factor = GetIntParam(this->params, SketchParamKey::max_innermost_split_factor);
 
   ConfigKey config_key;
   // std::cout << "size of v_splitMeta_info: " << v_splitMeta_info.size() << std::endl;
   int total_tb_size = 1;
+  int totalReg = 1;
   for (auto spm : v_splitMeta_info) {
     // std::cout << "spm : " << *spm << std::endl;
     if (spm->parallel == 1) {// filter tb size for parallel dims
       int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
       int tb = spm->tile_sizes[2];
       int grid = spm->tile_sizes[0];
-      std::vector<int> tile_conf = current_config[spm->origin_itr->name];
-      // std::cout << "tile_name " << spm->origin_itr->name << std::endl;
-      if (tile_conf[1] > max_innermost_split_factor){
-        return false;
-      }
+      totalReg *= reg;
       total_tb_size *= tb;
       // (Chendi)further prune?
     } else {// and filter inner_outer for reduce dims
       int outer_SM = spm->tile_sizes[0];
       int inner_outer = spm->tile_sizes[1];
       int inner_inner = spm->tile_sizes[2];
-      std::vector<int> tile_conf = current_config[spm->origin_itr->name];
-      // std::cout << "tile_name " << spm->origin_itr->name << std::endl;
-      if (tile_conf[0] > max_innermost_split_factor){
-        return false;
-      }
       // (Chendi)further prune?
     }
+  }
+  if (totalReg > 256){
+    return false;
   }
   if (total_tb_size > 1024 || total_tb_size < 32){
     return false;
@@ -1473,7 +1471,7 @@ bool SketchPolicyNode::cuda_view(const State& state, std::unordered_map<std::str
 Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches, int num_required) {
   PrintTitle("Sample CUDA View Population", verbose);
   // Use this population as the parallel degree to do sampling
-  int population = num_required;
+  int population = num_required*4;
   sample_init_min_pop_ = num_required;
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
@@ -1525,23 +1523,28 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
       // Run the cost model to make filter out states that failed to extract features.
       // This may happen due to illegal schedules or the schedules that uses too much
       // memory on GPU.
-      std::vector<float> pop_scores;
-      pop_scores.reserve(cand_states.size());
       cand_states = search_task->compute_dag.InferBound(cand_states);
       PruneInvalidState(search_task, &cand_states);
-      program_cost_model->Predict(search_task, cand_states, &pop_scores);
 
       for (size_t i = 0; i < cand_states.size(); i++) {
+        // skip cache_failed
+        if (cache_failed.count(cand_states[i].ToStr()) != 0) {
+          continue;
+        }
+        // failure visited use toStr() to avoid
         std::vector<splitMeta*> v_splitMeta_info;
         v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
         const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
         std::unordered_map<std::string, std::vector<int>> current_config = GetStateFactor(search_task, cand_states[i]);
-        if (cuda_view(cand_states[i], current_config, v_splitMeta_info) && pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0 && visited.count(state_str) == 0) {
+        bool isCudaView = cuda_view(cand_states[i], current_config, v_splitMeta_info);
+        if (isCudaView && explored_state_strs.count(state_str) == 0 && visited.count(state_str) == 0) {
           explored_state_strs.insert(state_str);
           out_states.push_back(std::move(cand_states[i]));
           unchange_cnt = 0;  // Reset the counter once we found a valid state
-        } else {
+        } else if (!isCudaView) { // count cuda view failed, bring pop/2 to here
           fail_ct++;
+          // cache all sampled population
+          cache_failed.insert(cand_states[i].ToStr());
         }
       }
     }
@@ -1552,10 +1555,20 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
                             .count();
       StdCout(verbose) << "Sample Iter: " << iter << std::fixed << std::setprecision(4)
                        << "\t#Pop: " << out_states.size() << "\t#Target: " << sample_init_min_pop_
-                       << "\tfail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
+                       << "\tCUDA view fail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
                        << std::setprecision(2) << duration << std::endl;
     }
 
+    if (unchange_cnt == 5) {
+      // Reduce the target size to avoid too-long time in this phase if no valid state was found
+      // in the past iterations
+      if (sample_init_min_pop_ > 1) {
+        sample_init_min_pop_ /= 2;
+        StdCout(verbose) << "#Target has been reduced to " << sample_init_min_pop_
+                         << " due to too many failures or duplications" << std::endl;
+      }
+      unchange_cnt = 0;
+    }
     iter++;
   }
 
@@ -1563,7 +1576,7 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
                         std::chrono::high_resolution_clock::now() - tic_begin)
                         .count();
   StdCout(verbose) << "Sample \t#s: " << out_states.size()
-                   << "\tfail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
+                   << "\tCUDA view fail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
                    << std::setprecision(2) << duration << std::endl;
   return out_states;
 }

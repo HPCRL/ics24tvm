@@ -204,6 +204,7 @@ bool isConfigKeyInTable(int key) ;
   bool firstround = true;
   int num_failed_local_search_;
   std::unordered_set<std::string> visited;
+  std::unordered_set<std::string> cache_failed;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
 
