@@ -243,7 +243,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     int max_num_for_measure = 64;
     int measure_threshold = max_num_for_measure;
     num_failed_local_search_ = 0;
-    int init_num = 16;
+    int init_num = 1600;
 
     while (ct < n_trials) {
       // create new predict based search
@@ -251,6 +251,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       if (next_states.empty()){
+        // NO more neighbour to explore, resample.
         firsttime_random = true;
         firstround = true;
       }
@@ -291,7 +292,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         // we could have no local min find after one predice but keep moving to neigbour. WHy fail???
       }
 
-      
       if (static_cast<int>(local_min_set.size()) > measure_threshold || local_min_set.size() + ct >= n_trials){ // once local_min_set is large enough, measure them
         // YUFAN WHY we need a measure_threshold ????
         
@@ -310,13 +310,14 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
               State tmp = inputs[j].get()->state;
               measure_states.push_back(tmp);
           }
-          program_cost_model->Predict(search_task, measure_states, &r_scores);
+          //program_cost_model->Predict(search_task, measure_states, &r_scores);
           // YUFAN WHY we need Predict here ????
 
 
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
-          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+          results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+          //results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
           // reset the measure_threshold once we have measured some states
           measure_threshold = max_num_for_measure;
           // reset empty_retry_count
@@ -325,12 +326,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           auto t_begin = std::chrono::high_resolution_clock::now();
 
           // Retrain the cost model before the next search round
-          PrintTitle("Train cost model", verbose);
+          PrintTitle("****** Train cost model", verbose);
           program_cost_model->Update(inputs, results);
 
           PrintTimeElapsed(t_begin, "training", verbose);
         }
-        std::cout << "Number of measurement: " << inputs.size() << std::endl;
+        std::cout << "****** Number of measurement: " << inputs.size() << std::endl;
         ct += inputs.size();
       }
 
@@ -352,7 +353,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           break;
         }
       }
-    }
+
+    }//End of while loop
     
 
     PrintTitle("Done", verbose);
@@ -1235,7 +1237,7 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
       }
     }
     double duration1 = std::chrono::duration_cast<std::chrono::duration<double>>(
-                            std::chrono::high_resolution_clock::now() - tic_begin)
+                            std::chrono::high_resolution_clock::now() - tic_begin1)
                             .count();
     StdCout(verbose) << "GenerateSplitMeta Time elapsed: " << std::fixed
                       << std::setprecision(5) << duration1 << std::endl;
@@ -1255,15 +1257,20 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     }
   }
   
-  assert(init_population.size() == 1);
-  // YUFAN WHY this assertion ????
 
   std::cout << "init_population size: " << init_population.size() << std::endl;
   PrintTitle("Generate Neighbours", verbose);
+  auto tic_begin2 = std::chrono::high_resolution_clock::now();
 
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
-
+  
+  double duration2 = std::chrono::duration_cast<std::chrono::duration<double>>(
+                            std::chrono::high_resolution_clock::now() - tic_begin2)
+                            .count();
+  StdCout(verbose) << "GenerateNeighbours Time elapsed: " << std::fixed
+                      << std::setprecision(5) << duration2 << std::endl;
   PrintTitle("Node Move", verbose);
+
   return NodeMove(neighbour_table, next_states);
 }
 
@@ -1441,7 +1448,7 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     }
   }
   // std::cout << "after pruning, out_states size: " << out_states.size() << std::endl;
-  // std::cout << "fail_ct: " << fail_ct << std::endl;
+  // std::cout << "fail_ct: " << fail_ct << std::endl;cuda_view
 
   return out_states;
 }
@@ -1481,7 +1488,7 @@ bool SketchPolicyNode::cuda_view(const State& state, std::unordered_map<std::str
 Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches, int num_required) {
   PrintTitle("Sample CUDA View Population", verbose);
   // Use this population as the parallel degree to do sampling
-  int population = num_required*4;
+  int population = num_required*2;
   sample_init_min_pop_ = num_required;
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
