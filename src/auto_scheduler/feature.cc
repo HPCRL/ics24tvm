@@ -94,6 +94,7 @@ struct xBufferAccessFeature {
   BufferAccessType acc_type;      // The type of the access
   std::string scope;
   int64_t touch_size; 
+  int vector_len;
 };
 
 
@@ -877,22 +878,23 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     //   std::cout << "TB shape  << " << threadIdx_x_len_ << ","<< thread_idx_y_len_ << ", "<< thread_idx_z_len_<<  " >>"<< std::endl;
     //   std::cout << "GRID shape  << " << blockIdx_x_len_ << ","<< block_idx_y_len_ << ", "<< block_idx_z_len_<<  " >>"<< std::endl;
     // }
-    // if (static_cast<int>(is_gpu_) == 1){
-    //   for (auto x : for_loop_stack_) {
-    //     if (x->kind == ForKind::kSerial){
-    //       std::cout << "SER Var " << x->loop_var << std::endl;
-    //       std::cout << "ext " << x->extent << std::endl;
-    //     }
-    //     else if(x->kind == ForKind::kParallel) {
-    //       std::cout << "TH Var " << x->loop_var << std::endl;
-    //       std::cout << "ext " << x->extent << std::endl;
-    //     }
-    //     else if(x->kind == ForKind::kUnrolled) {
-    //       std::cout << "NROLL Var " << x->loop_var << std::endl;
-    //     }
-    //   }
-    // }
-    // int serial_for_loop_num = 0;
+    int buffer_vect_len = -1;
+    if (static_cast<int>(is_gpu_) == 1){
+      for (auto x : for_loop_stack_) {
+        if (x->kind == ForKind::kVectorized){
+          // std::cout << "vect Var " << x->loop_var << std::endl;
+          // std::cout << "ext " << x->extent << std::endl;
+          buffer_vect_len = GetIntImm(x->extent);
+        }
+        // else if(x->kind == ForKind::kParallel) {
+        //   std::cout << "TH Var " << x->loop_var << std::endl;
+        //   std::cout << "ext " << x->extent << std::endl;
+        // }
+        // else if(x->kind == ForKind::kUnrolled) {
+        //   std::cout << "NROLL Var " << x->loop_var << std::endl;
+        // }
+      }
+    }
     // Compute touched region for all outer loops
     for (auto x : for_loop_stack_) {
       ana_.Bind(x->loop_var, Range::FromMinExtent(x->min, 1), true);
@@ -950,6 +952,7 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
       xacc_fea.scope = GetScopeFromBufferName(t->name_hint);
       xacc_fea.acc_type = acc.acc_type;
       xacc_fea.touch_size = (*buffer_touch_map)[t];
+      xacc_fea.vector_len = (buffer_vect_len == -1 ? 1 : buffer_vect_len);
     }
     //Per Stmt --> List of each buffer info
     //std::cout << "???? xacc_feas size " << xacc_feas.size() << std::endl;
@@ -1816,8 +1819,10 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, const State& s
   return v_splitMeta_info;
 }
 
-std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features) {
-
+std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features, int num_sm, int maxDynamicSharedMemorySize) {
+  std::map<std::string, ParallelDataStruct> parallel_data_map;
+  std::map<std::string, TrueReductionData> true_reduction_data_map;
+  std::map<std::string, StencilReductionData> stencil_reduction_data_map;
 
   // std::cout << "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
   float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM;
@@ -2396,8 +2401,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
   totalReuse = 1.0/totalReuse;
-  int num_sm = getSM();
-  // std::cout << "\nThe GPU's SM number is " << num_sm << std::endl;
 
   float wave_fac = grid_size*1.0/num_sm;
   float wave = std::ceil(wave_fac);
@@ -2443,6 +2446,14 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     return std::make_tuple(-1, -1, -1, -1);
   }
 
+  if (totalReg > 256){
+    return std::make_tuple(-1, -1, -1, -1);
+  }
+
+  if (totalShared > maxDynamicSharedMemorySize){
+    return std::make_tuple(-1, -1, -1, -1);
+  }
+
   return std::make_tuple(totalShared, totalReg, totalReuse, wave_efficiency);
 }
 
@@ -2485,7 +2496,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
       //std::cout << "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
       // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-      int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
+      int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp / xacc_fea.vector_len;
       // std::cout << "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared") {
@@ -2607,6 +2618,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
       pass_list.push_back(tir::transform::StorageRewrite());
       pass_list.push_back(tir::transform::Simplify());
       tvm::Map<String, tvm::PrimExpr> gpu_params{
+          {"max_sm", task->hardware_params->num_cores},
           {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
           {"max_local_memory_per_block", task->hardware_params->max_local_memory_per_block},
           {"max_threads_per_block", task->hardware_params->max_threads_per_block},
@@ -2625,10 +2637,17 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     //default 164 feature here
     // GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
     tvm::Map<String, tvm::PrimExpr> gpu_params{
+          {"max_sm", task->hardware_params->num_cores},
           {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
           {"max_local_memory_per_block", task->hardware_params->max_local_memory_per_block},
           {"max_threads_per_block", task->hardware_params->max_threads_per_block},
+          {"max_vector_bytes", task->hardware_params->vector_unit_bytes},
+          {"max_vthread", task->hardware_params->max_vthread_extent},
     };
+
+    // for (auto it : gpu_params){
+    //   std::cout  << it.first << "   " << it.second << std::endl;
+    // }
 
      /**
      * @brief 
@@ -2665,8 +2684,18 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
 
 
     std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
-    //call extract_features
-    extract_features(task, state, v_splitMeta_info, &features_extracted);
+
+    // valid tuple create for prune
+    int a, b, c, d;
+    int num_sm = task->hardware_params->num_cores;
+    int maxDynamicSharedMemorySize = task->hardware_params->max_shared_memory_per_block / 4; // bytes
+    std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize);
+    if (a==-1){
+      // set all features to -1
+      for (int i = 0; i < 7; i++){
+        features_extracted[i] = 0;
+      }
+    }
 
     // clear the feature vector
     feature->clear();

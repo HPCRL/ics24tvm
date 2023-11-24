@@ -312,6 +312,7 @@ std::vector<String> xVerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> 
   int64_t max_vthread = INT64_MAX;
   int64_t max_vector_bytes = INT64_MAX;
   int64_t max_kernels = INT64_MAX;
+  int64_t max_sm = INT64_MAX;
 
   for (auto iter : constraints) {
     const IntImmNode* val = iter.second.as<IntImmNode>();
@@ -333,6 +334,8 @@ std::vector<String> xVerifyGPUCode_(const PrimFunc& func, Map<String, PrimExpr> 
       max_vector_bytes = val->value;
     } else if (iter.first == "max_kernels") {
       max_kernels = val->value;
+    } else if (iter.first == "max_sm") {
+      max_sm = val->value;
     } else {
       LOG(FATAL) << "Invalid check item: " << iter.first;
     }
