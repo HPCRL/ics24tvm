@@ -176,7 +176,7 @@ bool isConfigKeyInTable(int key) ;
 
   Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
   
-  Array<State> GetDirectNeighbors(State state, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
+  std::vector<ConfigKey> GetDirectNeighbors(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
   std::unordered_map<std::string, std::vector<int>> GetStateFactor(const SearchTask& task, const State& state);
 
