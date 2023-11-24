@@ -203,7 +203,6 @@ bool isConfigKeyInTable(int key) ;
   /*! \brief The cached sketches */
   Array<State> sketch_cache_;
   std::map<int, ConfigKey> unique_conf_table_;
-  bool firstround = true;
     int num_failed_local_search_;
     std::unordered_set<std::string> visited;
   std::unordered_set<std::string> cache_failed;

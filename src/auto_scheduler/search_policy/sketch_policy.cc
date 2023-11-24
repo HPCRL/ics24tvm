@@ -250,7 +250,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       }
       initStatesForModel = SampleInitPopulation(sketch_cache_);
       initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
-      // sample 64 to update the model
+      // sample to update the model
       inputs = PackStateForModel(initStatesForModel, initStatesForModel.size());
 
       int model_age = 1;
@@ -284,18 +284,13 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       if (next_states.empty()){
-        if (local_min_set.empty()){// No base nodes, no local min in stashed local_min_set, consider as fail
-          num_failed_local_search_ += 1;
-        }
         // NO more neighbour to explore, resample.
         firsttime_random = true;
-        firstround = true;
       }
       else{
         firsttime_random = false;
       }
 
-      int count_duplicate = 0;
       if (!local_min_best_states.empty()){ // if we get some local min states, add them to local_min_set
         for (auto localmin : local_min_best_states){
           local_min_set.push_back(localmin);
@@ -305,41 +300,22 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure){
         // once local_min_set is large enough, measure them
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
-        // TODO: (Chendi)here local_min_set has no duplicate, should be safe to directly measure, remove measured_states_set_ check
         inputs = PackState(local_min_set, n_trials - ct);
         local_min_set.clear();
         if (!inputs.empty()) {
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
           results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-          // reset empty_retry_count
-          empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
 
           auto t_begin = std::chrono::high_resolution_clock::now();
 
           // Retrain the cost model before the next search round
-          PrintTitle("****** Train cost model", verbose);
+          PrintTitle("Train cost model", verbose);
           program_cost_model->Update(inputs, results);
 
           PrintTimeElapsed(t_begin, "training", verbose);
         }
-        // std::cout << "****** Number of measurement: " << inputs.size() << std::endl;
         ct += inputs.size();
-      }
-
-      // Stop if hit too many same local min states
-      // std::cout << "Rest sequential failed count before early stop : " << empty_retry_count << std::endl;
-      if (num_failed_local_search_ != 0){
-        // check if too many sequantial failed or local_min_set has no local min states to measure, early stop
-        if (empty_retry_count - num_failed_local_search_ > 0 || local_min_set.size() > 0){
-          // in case we can't get enough states in local_min_set, decrease the measure threshold to at lease measure some states
-          empty_retry_count -= num_failed_local_search_;
-          num_failed_local_search_ = 0;
-          continue;
-        } else {
-          StdCout(verbose) << "Hitting too many same local min states, stop" << std::endl;
-          break;
-        }
       }
     } //End of while loop
     
@@ -955,9 +931,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     neighbors_remove_dup.insert(state_to_string(state, base_meta_info, search_task));
 
     // get direct neighbors
-    std::unordered_map<std::string, std::vector<int>> current_config = GetStateFactor(search_task, state);
-    std::vector<ConfigKey> direct_neighbors_config_key = GetDirectNeighbors(current_config, pz_factors, sketches, v_splitMeta_info);
-
+    std::vector<ConfigKey> direct_neighbors_config_key = GetDirectNeighbors(current_base, pz_factors, sketches, v_splitMeta_info);
     for (auto n : direct_neighbors_config_key) {
       const auto state_str = ConfigKey2string(n);
       if (neighbors_remove_dup.count(state_str) == 0) {
@@ -987,8 +961,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 
   int idx = 0;
   for (auto& state_ite : states) {
-    State state; // current base
-    state = state_ite;
+    State state = state_ite;
     
     std::map<int, ConfigKey> tmp_conf_table;
     std::vector<ConfigKey> tmp_neighbors_conf_key = all_neighbors_config_key[idx];
@@ -997,12 +970,14 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       tmp_conf_table[i++] = n;
     }
     Array<State> sampled_states = SampleUniquePopulation(tmp_conf_table, sketches, v_splitMeta_info);
-    Array<State> neighbors;
-    neighbors.push_back(state);
+
+    Array<State> path;
+    // puash back base state to path
+    path.push_back(state);
     for (auto& s : sampled_states) {
-      neighbors.push_back(s);
+      path.push_back(s);
     }
-    neighbour_table.push_back(neighbors);
+    neighbour_table.push_back(path);
     idx += 1;
   }
 
@@ -1024,7 +999,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     Array<State> local_min;
     std::mutex next_states_mutex, visited_mutex, local_min_mutex;
 
-    //calculate the pop_scores for every path, later accecible by index
+    //calculate the pop_scores for every path, ready for parallel
     std::vector<std::vector<float>> vec_pop_scores;
     for (auto path : neighbour_table){
       if (path.empty()) {
@@ -1065,8 +1040,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
         std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
         const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
 
-        // check if it is a real local min, all neighbor pscores should be not better than base
-        // pscore
+        // check if it is a real local min, all neighbor pscores should be not better than base pscore
         if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
           real_local_min = false;
         }
@@ -1087,8 +1061,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
           }
 
           // may have equal pscore neighbors
-          // in case we miss any near boundary states, equal best pscore states should also be
-          // explored
+          // in case we miss any near boundary states, equal best pscore states should also be explored
           for (int i = 0; i < pop_scores.size(); i++) {
             if (i == 0) continue;  // skip base state
 
@@ -1113,20 +1086,18 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
         const auto state_str = state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
         std::lock_guard<std::mutex> lock_visited(visited_mutex);
         {
-          // if best_neighbour_index != 0, it has never been visited, no need to check visited,
-          // direct insert
+          // if best_neighbour_index != 0, it has never been visited, no need to check if it's in visited, direct insert
           visited.insert(state_str);  // add all next_states to visited, avoid circular
         }
 
         std::lock_guard<std::mutex> lock(next_states_mutex);
         {
-          next_states->push_back(
-              local_path[best_neighbour_index]);  // move to better predict neighbour
+          next_states->push_back(local_path[best_neighbour_index]);  // move to better predict neighbour
         }
       }
     });
 
-    // TO measure local min
+    // measure local min
     return local_min;
 }
 
@@ -1215,9 +1186,8 @@ std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorIn
 }
 
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
-  // std::cout << "[SearchOneRoundPruePredict] searching" << next_states->size() << std::endl;
   // PrintTitle("Search", verbose);
-  // 1. Generate sketches
+  // Generate sketches
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
     assert(sketch_cache_.size() == 1);
@@ -1235,7 +1205,6 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   Array<State> init_population;
   if (firsttime_random){
     // Sample the init population
-    
     init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
     
     // push num_random_states random states into init_population as start point
@@ -2074,7 +2043,7 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     v_splitMeta_info = GenerateSplitMeta(this, state);
     std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
     if (!measured_states_set_.count(state_str)) {
-      measured_states_set_.insert(std::move(state_str));
+      measured_states_set_.insert(std::move(state_str));// just for remove dup, will clear later
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
