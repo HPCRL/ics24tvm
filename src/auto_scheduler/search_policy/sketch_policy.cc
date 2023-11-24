@@ -291,12 +291,17 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         firsttime_random = false;
       }
 
+    
       if (!local_min_best_states.empty()){ // if we get some local min states, add them to local_min_set
         for (auto localmin : local_min_best_states){
           local_min_set.push_back(localmin);
         }
       }
 
+      if (next_states.empty() &&  local_min_set.size() != 0){
+        //No more neighbour explore but candidate not hit threshold
+        // CALL measure
+      }
       if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure){
         // once local_min_set is large enough, measure them
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
@@ -316,7 +321,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           PrintTimeElapsed(t_begin, "training", verbose);
         }
         ct += inputs.size();
-      }
+      } // End of threshold measure
+
     } //End of while loop
     
 
@@ -953,6 +959,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       }
     }
 
+    // YUFAN: NO need lock and can create thread-local data field and merge.
     {
       std::lock_guard<std::mutex> lock(all_neighbors_config_key_mutex);
       all_neighbors_config_key.push_back(neighbors_conf_key);
@@ -998,6 +1005,8 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
 
     Array<State> local_min;
     std::mutex next_states_mutex, visited_mutex, local_min_mutex;
+
+    // YUFAN: next_states_mutex, local_min_mutex NO need lock, hurts performance. REMOVE
 
     //calculate the pop_scores for every path, ready for parallel
     std::vector<std::vector<float>> vec_pop_scores;
