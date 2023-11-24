@@ -235,22 +235,58 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
     Array<State> local_min_best_states, track_path;
-    Array<State> local_min_set;
-
-    // TODO(Chendi): record all local min states, then do measurement to avoid warm-up issue.
+    // record all local min states
+    Array<State> local_min_set, initStatesForModel;
 
     bool firsttime_random = true;
-    int max_num_for_measure = 64;
-    int measure_threshold = max_num_for_measure;
+    int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
-    int init_num = 1600;
+    int init_num = 16;
 
+    // generate a model based on random sampling and measure them
+    if (ct == 0){ // just run it at the first time
+      if (sketch_cache_.empty()) {
+        sketch_cache_ = GenerateSketches();
+      }
+      initStatesForModel = SampleInitPopulation(sketch_cache_);
+      initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
+      // sample 64 to update the model
+      inputs = PackStateForModel(initStatesForModel, initStatesForModel.size());
+
+      int model_age = 1;
+      std::vector<float> r_scores;
+      if (!inputs.empty()) {
+        r_scores.reserve(inputs.size());
+        Array<State> measure_states;
+        measure_states.reserve(inputs.size());
+        for (size_t j = 0; j < inputs.size(); ++j) {
+            State tmp = inputs[j].get()->state;
+            measure_states.push_back(tmp);
+        }
+        program_cost_model->Predict(search_task, measure_states, &r_scores);
+
+        // use xMeasure to avoid write into the json log
+        results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+
+        auto t_begin = std::chrono::high_resolution_clock::now();
+
+        // Retrain the cost model before the next search round
+        PrintTitle("Model trained for the neighbor search", verbose);
+        program_cost_model->Update(inputs, results);
+
+        PrintTimeElapsed(t_begin, "training", verbose);
+      }
+    }
+    
     while (ct < n_trials) {
       // create new predict based search
       local_min_best_states = SearchOneRoundPruePredict(init_num, &next_states, firsttime_random);
       std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       if (next_states.empty()){
+        if (local_min_set.empty()){// No base nodes, no local min in stashed local_min_set, consider as fail
+          num_failed_local_search_ += 1;
+        }
         // NO more neighbour to explore, resample.
         firsttime_random = true;
         firstround = true;
@@ -258,68 +294,24 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       else{
         firsttime_random = false;
       }
-      int count_duplicate = 0;
-      // std::cout << "size of local_min_best_states: " << local_min_best_states.size() << std::endl;
-      if (!local_min_best_states.empty()){
-        // reset empty_retry_count and measure_threshold
-        empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
-        measure_threshold = max_num_for_measure;
-        // YUFAN WHY do we need a rest???
 
+      int count_duplicate = 0;
+      if (!local_min_best_states.empty()){ // if we get some local min states, add them to local_min_set
         for (auto localmin : local_min_best_states){
-          std::vector<splitMeta*> v_splitMeta_info;
-          v_splitMeta_info = GenerateSplitMeta(this, localmin);
-          std::string state_str = state_to_string(localmin, v_splitMeta_info, search_task);
-          if (measured_states_set_.count(state_str)){ // current local min state has been measured
-            count_duplicate++;
-          }
-          else{ // otherwise, add to local_min_set for measurement
-            // Array<State> tmp = SampleCUDAPopulation(sketch_cache_, 2);
-            // // TODO(Chendi): here we only push one random state to warm up, can we use other way without measure any random states?
-            // if (local_min_set.size() == 0 && tmp.size() > 1){// push track path to warm up
-            //   int random_idx = rand_gen() % tmp.size();
-            //   local_min_set.push_back(tmp[random_idx]);
-            // }
-            local_min_set.push_back(localmin);
-          }
+          local_min_set.push_back(localmin);
         }
       }
-      else{
-        std::cout << "No local min found ?? " << std::endl;
-        num_failed_local_search_++;
 
-        // YUFAN WHY ?????
-        // we could have no local min find after one predice but keep moving to neigbour. WHy fail???
-      }
-
-      if (static_cast<int>(local_min_set.size()) > measure_threshold || local_min_set.size() + ct >= n_trials){ // once local_min_set is large enough, measure them
-        // YUFAN WHY we need a measure_threshold ????
-        
+      if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure){
+        // once local_min_set is large enough, measure them
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
         // TODO: (Chendi)here local_min_set has no duplicate, should be safe to directly measure, remove measured_states_set_ check
         inputs = PackState(local_min_set, n_trials - ct);
         local_min_set.clear();
-
-        int model_age = 1;
-        std::vector<float> r_scores;
         if (!inputs.empty()) {
-          r_scores.reserve(inputs.size());
-          Array<State> measure_states;
-          measure_states.reserve(inputs.size());
-          for (size_t j = 0; j < inputs.size(); ++j) {
-              State tmp = inputs[j].get()->state;
-              measure_states.push_back(tmp);
-          }
-          //program_cost_model->Predict(search_task, measure_states, &r_scores);
-          // YUFAN WHY we need Predict here ????
-
-
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
           results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-          //results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
-          // reset the measure_threshold once we have measured some states
-          measure_threshold = max_num_for_measure;
           // reset empty_retry_count
           empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
 
@@ -336,16 +328,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       }
 
       // Stop if hit too many same local min states
-      //std::cout << "Number of measurement threshold: " << measure_threshold << std::endl;
       std::cout << "Rest sequential failed count before early stop : " << empty_retry_count << std::endl;
-      std::cout << "Number of failed local min search: " << num_failed_local_search_ << std::endl;
       if (num_failed_local_search_ != 0){
         // check if too many sequantial failed or local_min_set has no local min states to measure, early stop
         if (empty_retry_count - num_failed_local_search_ > 0 || local_min_set.size() > 0){
-          // too many measured states, reduce the measure_threshold
           // in case we can't get enough states in local_min_set, decrease the measure threshold to at lease measure some states
           empty_retry_count -= num_failed_local_search_;
-          measure_threshold -= 1;
           num_failed_local_search_ = 0;
           continue;
         } else {
@@ -353,8 +341,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
           break;
         }
       }
-
-    }//End of while loop
+    } //End of while loop
     
 
     PrintTitle("Done", verbose);
@@ -1015,99 +1002,123 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 *  @param next: next states
 *  @return: local mins and next states
 */
-Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states){
-  // clear next_states
-  next_states->clear();
+Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states) {
+    auto tic_begin = std::chrono::high_resolution_clock::now();
 
-  Array<State> local_min;
-  int round = 0;
-  for (auto path : neighbour_table){
-    if (path.empty()){
-      std::cout << "path is empty" << std::endl;
-      continue;
-    }
+    // Clear next_states
+    next_states->clear();
 
-    std::vector<float> pop_scores;
-    pop_scores.reserve(path.size());
-    path = search_task->compute_dag.InferBound(path);
-    PruneInvalidState(search_task, &path);
-    program_cost_model->Predict(search_task, path, &pop_scores);
+    Array<State> local_min;
+    std::mutex next_states_mutex, visited_mutex, local_min_mutex;
 
-
-    // -inf
-    if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()){
-      // Invalid and no neighbors
-      continue;
-    }
-    
-    // TODO(Chendi): sorted by score
-    // Determine if the neighbor should be a local minimum
-    // path[0] : base state
-    // path[1:] : neighbour states
-    float base_score = pop_scores[0];
-    float best_score = base_score;
-    int best_neighbour_index = 0;
-    bool real_local_min = true;
-    for (int i = 1; i < pop_scores.size(); i++){
-      // add all path to visited set
-      std::vector<splitMeta*> v_splitMeta_info;
-      v_splitMeta_info = GenerateSplitMeta(this, path[i]);
-      const auto state_str = state_to_string(path[i], v_splitMeta_info, search_task);
-      //Yufan: should we add epsilon threshold for pop_scores[i]?
-
-      // check if it is a real local min, all neighbor pscores should be not better than base pscore
-      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
-        real_local_min = false;
+    //calculate the pop_scores for every path, later accecible by index
+    std::vector<std::vector<float>> vec_pop_scores;
+    for (auto path : neighbour_table){
+      if (path.empty()) {
+          std::cout << "path is empty" << std::endl;
+          continue;
       }
-      // find a better one, update best_score
-      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score && visited.count(state_str) == 0) {
-        best_neighbour_index = i;
-        best_score = pop_scores[i];
-      }
+      std::vector<float> tmp;
+      tmp.reserve(path.size());
+      program_cost_model->Predict(search_task, path, &tmp);
+      vec_pop_scores.push_back(tmp);
     }
-    
-    // local min or not
-    if (best_neighbour_index == 0){
-      if (real_local_min){ // no absolute better pscore neighbor, real local min
-        local_min.push_back(path[0]);     // send out local_min to measure
 
-        // may have equal pscore neighbors
-        // in case we miss any near boundary states, equal best pscore states should also be explored
-        // std::cout << "number of neighbors : " << pop_scores.size() - 1 << std::endl;
-        for (int i = 0; i < pop_scores.size(); i++){
-          std::vector<splitMeta*> v_splitMeta_info;
-          v_splitMeta_info = GenerateSplitMeta(this, path[i]);
-          const auto state_str = state_to_string(path[i], v_splitMeta_info, search_task);
-          if (i == 0) continue; // skip base state
+    support::parallel_for(0, neighbour_table.size(), [this, &neighbour_table, &vec_pop_scores, next_states, &local_min, &next_states_mutex, &visited_mutex, &local_min_mutex](int index) {
+        const auto local_path = neighbour_table[index];
 
-          // add unvisited equal pscore states to next_states
-          if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) == 0) {
-            // std::cout << "idx : " << i << ", equal best pscore : " << pop_scores[i] << " should also be explored" << std::endl;
-            // add all next_states to visited, avoid circular
-            visited.insert(state_str);
-            next_states->push_back(path[i]);
-          }
-          // print visited equal pscore states
-          // if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) != 0){
-          //   // std::cout << "idx : " << i << ", pscore : " << pop_scores[i] << " has been visited" << std::endl;
-          // }
+        if (local_path.empty()) {
+            std::cout << "path is empty" << std::endl;
+            return;
         }
-      }
-    }
-    else{
-      // General case, better neighbour to move
-      std::vector<splitMeta*> v_splitMeta_info;
-      v_splitMeta_info = GenerateSplitMeta(this, path[best_neighbour_index]);
-      const auto state_str = state_to_string(path[best_neighbour_index], v_splitMeta_info, search_task);
-      // add all next_states to visited, avoid circular
-      // if best_neighbour_index != 0, it has never been visited, no need to check visited, direct insert
-      visited.insert(state_str);
-      next_states->push_back(path[best_neighbour_index]);   // move to better predict neighbour 
-    }
-  }
-  std::cout << "[NodeMove] Number of next_states : " << next_states->size() << std::endl;
-  // TO measure local min
-  return local_min;
+
+        std::vector<float> pop_scores = vec_pop_scores[index];
+
+        if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
+      	    // Invalid and no neighbors
+            return;
+        }
+
+        // TODO(Chendi): sorted by score
+        // Determine if the neighbor should be a local minimum
+        // path[0] : base state
+        // path[1:] : neighbour states
+        float base_score = pop_scores[0];
+        float best_score = base_score;
+        int best_neighbour_index = 0;
+        bool real_local_min = true;
+
+        for (int i = 1; i < pop_scores.size(); i++) {
+            std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
+            const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
+
+
+            // check if it is a real local min, all neighbor pscores should be not better than base pscore
+            if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
+                real_local_min = false;
+            }
+            // find a better one, update best_score
+            if (pop_scores[i] > -1e10 && pop_scores[i] > best_score && visited.count(state_str) == 0) {
+                best_neighbour_index = i;
+                best_score = pop_scores[i];
+            }
+        }
+
+
+        // local min or not
+        if (best_neighbour_index == 0) {
+            if (real_local_min) {// no absolute better pscore neighbor, real local min
+                {
+                    std::lock_guard<std::mutex> lock(local_min_mutex);
+                    local_min.push_back(local_path[0]);// send out local_min to measure
+                }
+
+
+                // may have equal pscore neighbors
+                // in case we miss any near boundary states, equal best pscore states should also be explored
+                for (int i = 0; i < pop_scores.size(); i++) {
+                    if (i == 0) continue;// skip base state
+
+                    std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
+                    const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
+
+                    // add unvisited equal pscore states to next_states
+                    if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] && visited.count(state_str) == 0) {
+                        std::lock_guard<std::mutex> lock_visited(visited_mutex);
+                        {
+                          visited.insert(state_str);// add all next_states to visited, avoid circular
+                        }
+                        std::lock_guard<std::mutex> lock(next_states_mutex);
+                        {
+                          next_states->push_back(local_path[i]);
+                        }
+                    }
+                }
+            }
+        } else {
+      	    // General case, better neighbour to move
+            std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[best_neighbour_index]);
+            const auto state_str = state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
+            std::lock_guard<std::mutex> lock_visited(visited_mutex);
+            {
+	            // if best_neighbour_index != 0, it has never been visited, no need to check visited, direct insert
+              visited.insert(state_str);// add all next_states to visited, avoid circular
+            }
+
+            std::lock_guard<std::mutex> lock(next_states_mutex);
+            {
+              next_states->push_back(local_path[best_neighbour_index]);// move to better predict neighbour 
+            }
+        }
+    });
+
+    double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
+                        std::chrono::high_resolution_clock::now() - tic_begin).count();
+    std::cout << "NodeMove Time elapsed: " << std::fixed << std::setprecision(5) << duration << std::endl;
+    std::cout << "[NodeMove] Number of next_states : " << next_states->size() << std::endl;
+
+    // TO measure local min
+    return local_min;
 }
 
 std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorInfo(SketchPolicyNode* policy, State* state, std::vector<splitMeta*> v_splitMeta_info){
@@ -1195,10 +1206,9 @@ std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorIn
 }
 
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
-  std::cout << "[SearchOneRoundPruePredict] next_states size: " << next_states->size() << std::endl;
+  // std::cout << "[SearchOneRoundPruePredict] next_states size: " << next_states->size() << std::endl;
   PrintTitle("Search", verbose);
   // 1. Generate sketches
-  std::unordered_map<std::string, std::vector<int>> pz_factors;
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
     assert(sketch_cache_.size() == 1);
@@ -1206,14 +1216,16 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   State state = sketch_cache_[0];
   std::vector<splitMeta*> v_splitMeta_info;
   v_splitMeta_info = GenerateSplitMeta(this, state);
+
+  // TODO:(Chendi) can move to global variable
+  std::unordered_map<std::string, std::vector<int>> pz_factors;
   pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   
   PrintTitle("Generate Base States", verbose);
   // base states in the init population
-
   Array<State> init_population;
   if (firsttime_random){
-    // 2. Sample the init population
+    // Sample the init population
     auto tic_begin = std::chrono::high_resolution_clock::now();
     init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
     double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
@@ -1242,13 +1254,6 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     StdCout(verbose) << "GenerateSplitMeta Time elapsed: " << std::fixed
                       << std::setprecision(5) << duration1 << std::endl;
     init_population = base_population;
-
-    // TODO: (Chendi) Need to sample more random states to avoid local minimums
-
-    // Yufan :: think about prue random??
-    // if (num_random_states > 0 && random_states != nullptr) {
-    //   *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
-    // }
   }
   else{
     init_population.clear();
@@ -1256,9 +1261,8 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
       init_population.push_back(s);
     }
   }
-  
 
-  std::cout << "init_population size: " << init_population.size() << std::endl;
+  std::cout << "Base nodes #" << init_population.size() << std::endl;
   PrintTitle("Generate Neighbours", verbose);
   auto tic_begin2 = std::chrono::high_resolution_clock::now();
 
@@ -2056,6 +2060,41 @@ std::string SketchPolicyNode::state_to_string(const State& state, std::vector<sp
   return res;
 }
 
+/* Pack state into MeasureInput and clear measured_states_set_
+*  @param best_states: states waiting to be measured
+*  @return: MeasureInput
+*/
+Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best_states, int remaining_n_trials) {
+  Array<MeasureInput> inputs;
+  size_t offset_best_upperbound = 0;
+  size_t offset_best = 0;
+  //constrcut all state until no more than remaining_n_trials
+  if (best_states.size() > remaining_n_trials){
+    offset_best_upperbound = remaining_n_trials;
+  }
+  else{
+    offset_best_upperbound = best_states.size();
+  }
+
+  while (offset_best < offset_best_upperbound ){
+    State state;
+    state = best_states[offset_best++];
+    // Check if it has already been measured
+
+    // std::string state_str = state.ToStr();
+    std::vector<splitMeta*> v_splitMeta_info;
+    v_splitMeta_info = GenerateSplitMeta(this, state);
+    std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
+    if (!measured_states_set_.count(state_str)) {
+      measured_states_set_.insert(std::move(state_str));
+      inputs.push_back(MeasureInput(search_task, state));
+    }
+  }
+  measured_states_set_.clear();
+  std::cout << "PackState inputs size: " << inputs.size() << std::endl;
+  return inputs;
+}
+
 /* Pack state into MeasureInput
 *  @param best_states: states waiting to be measured
 *  @return: MeasureInput
@@ -2083,7 +2122,6 @@ Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
     std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
     if (!measured_states_set_.count(state_str)) {
       measured_states_set_.insert(std::move(state_str));
-      measured_states_vector_.push_back(state);
       inputs.push_back(MeasureInput(search_task, state));
     }
   }

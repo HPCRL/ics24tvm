@@ -385,7 +385,7 @@ Array<MeasureResult> ProgramMeasurerNode::xMeasure(const SearchTask& task,
     // Call callback functions
     if (callbacks) {
       for (const auto& callback : callbacks.value()) {
-        callback->Callback(policy, input_batch, result_batch);
+        // callback->Callback(policy, input_batch, result_batch);
         callback->xCallback(policy, input_batch, result_batch, p_scores_batch, model_age);
       }
     }

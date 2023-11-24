@@ -557,9 +557,9 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
       Integer reg_tile = tile_config[conf_offset];
       Integer num_thread = tile_config[conf_offset+1];
       ////std::cout << "num_thread: " << num_thread << " reg_tile: " << reg_tile << std::endl;
-      candidate_lengths.push_back(reg_tile);
-      candidate_lengths.push_back(num_thread);
       candidate_lengths.push_back(1);
+      candidate_lengths.push_back(num_thread);
+      candidate_lengths.push_back(reg_tile);
       candidate_lengths.push_back(1);
       // //std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
       // for (auto len : candidate_lengths){
@@ -972,14 +972,24 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
 
       // Fuse all iterators to do cooperative fetching
       Iterator fused = state->fuse(stage_id, (*state)->stages[stage_id]->iters);
-      // Split out an extra iterator for vectorization
-      // The later EvolutionarySearch will try more possibility
-      const auto& iters0 = state->split(stage_id, fused, {Integer(1)});
-      state->vectorize(stage_id, iters0[1]);
-      // Follow split to keep a same thread extent with the root stage
-      const auto& iters1 =
-          state->follow_fused_split(stage_id, iters0[0], spatial_split_step_ids, 1, true);
-      state->bind(stage_id, iters1[1], IteratorAnnotation::kThreadX);
+      if (fused->range.defined()) {
+        int ext = GetIntImm(fused->range->extent);
+        if (ext % 2 == 0) {
+          const auto& iters0 = state->split(stage_id, fused, {Integer(2)});
+          state->vectorize(stage_id, iters0[1]);
+          // Follow split to keep a same thread extent with the root stage
+          const auto& iters1 =
+              state->follow_fused_split(stage_id, iters0[0], spatial_split_step_ids, 1, true);
+          state->bind(stage_id, iters1[1], IteratorAnnotation::kThreadX);
+        } else {
+          const auto& iters0 = state->split(stage_id, fused, {Integer(1)});
+          state->vectorize(stage_id, iters0[1]);
+          // Follow split to keep a same thread extent with the root stage
+          const auto& iters1 =
+              state->follow_fused_split(stage_id, iters0[0], spatial_split_step_ids, 1, true);
+          state->bind(stage_id, iters1[1], IteratorAnnotation::kThreadX);
+        }
+      }
     }
   }
   return ResultKind::kValid;

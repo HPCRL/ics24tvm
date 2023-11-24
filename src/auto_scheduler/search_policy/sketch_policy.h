@@ -194,6 +194,8 @@ bool isConfigKeyInTable(int key) ;
 
   Array<MeasureInput> PackState(const Array<State>& best_states,
                                             int remaining_n_trials);
+  Array<MeasureInput> PackStateForModel(const Array<State>& best_states,
+                                            int remaining_n_trials);
 
   /*! \brief The number of states to measure per iteration. */
   int num_measure_per_iter_;
@@ -202,8 +204,8 @@ bool isConfigKeyInTable(int key) ;
   Array<State> sketch_cache_;
   std::map<int, ConfigKey> unique_conf_table_;
   bool firstround = true;
-  int num_failed_local_search_;
-  std::unordered_set<std::string> visited;
+    int num_failed_local_search_;
+    std::unordered_set<std::string> visited;
   std::unordered_set<std::string> cache_failed;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
