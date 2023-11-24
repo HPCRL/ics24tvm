@@ -281,8 +281,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     while (ct < n_trials) {
       // create new predict based search
       local_min_best_states = SearchOneRoundPruePredict(init_num, &next_states, firsttime_random);
-      std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
-      std::cout << "Num of next_states: #" << next_states.size() << std::endl;
+      // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
+      // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       if (next_states.empty()){
         if (local_min_set.empty()){// No base nodes, no local min in stashed local_min_set, consider as fail
           num_failed_local_search_ += 1;
@@ -323,12 +323,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
           PrintTimeElapsed(t_begin, "training", verbose);
         }
-        std::cout << "****** Number of measurement: " << inputs.size() << std::endl;
+        // std::cout << "****** Number of measurement: " << inputs.size() << std::endl;
         ct += inputs.size();
       }
 
       // Stop if hit too many same local min states
-      std::cout << "Rest sequential failed count before early stop : " << empty_retry_count << std::endl;
+      // std::cout << "Rest sequential failed count before early stop : " << empty_retry_count << std::endl;
       if (num_failed_local_search_ != 0){
         // check if too many sequantial failed or local_min_set has no local min states to measure, early stop
         if (empty_retry_count - num_failed_local_search_ > 0 || local_min_set.size() > 0){
@@ -1207,7 +1207,7 @@ std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorIn
 
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
   // std::cout << "[SearchOneRoundPruePredict] next_states size: " << next_states->size() << std::endl;
-  PrintTitle("Search", verbose);
+  // PrintTitle("Search", verbose);
   // 1. Generate sketches
   if (sketch_cache_.empty()) {
     sketch_cache_ = GenerateSketches();
@@ -1221,7 +1221,7 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   std::unordered_map<std::string, std::vector<int>> pz_factors;
   pz_factors = GetFactorInfo(this, &state, v_splitMeta_info); // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
   
-  PrintTitle("Generate Base States", verbose);
+  // PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
   if (firsttime_random){
@@ -1355,8 +1355,6 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
   int population = conf_table.size();
 
   assert(sketches.size() == 1); 
-
-  State tmp_s = sketches[0]; // TODO: make muiltple sketch work later
 
   int fail_ct = 0;
   Array<State> out_states;

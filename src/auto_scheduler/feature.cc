@@ -1495,26 +1495,6 @@ void GetPerStoreFeatureName(int max_n_bufs, std::vector<std::string>* ret) {
   // section total : 3
 }
 
-int getSM() { // TODO: (Chendi) may need to check if user already set env variable for GPU
-  cudaDeviceProp deviceProp;
-  cudaError_t err = cudaGetDeviceProperties(&deviceProp, 0);
-  if (err != cudaSuccess) {
-    std::cout << "cudaGetDeviceProperties returned error code " << err << std::endl;
-    exit(-1);
-  }
-  return deviceProp.multiProcessorCount;
-}
-
-int getMaxSharedMem() {
-  int maxDynamicSharedMemorySize;
-  cudaError_t err = cudaDeviceGetAttribute(&maxDynamicSharedMemorySize, cudaDevAttrMaxSharedMemoryPerBlockOptin, 0);
-  if (err != cudaSuccess) {
-    std::cout << "cudaDeviceGetAttribute returned error code " << err << std::endl;
-    exit(-1);
-  }
-  return maxDynamicSharedMemorySize;
-}
-
 struct ParallelDataStruct {
   int reg;
   int pz;
