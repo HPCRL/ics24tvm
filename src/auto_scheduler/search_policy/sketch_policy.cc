@@ -941,13 +941,14 @@ std::string ConfigKey2string(const ConfigKey& conf) {
 */
 Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info){
   Array<Array<State>> neighbour_table;
-  std::vector<std::vector<ConfigKey>> all_neighbors_config_key; 
-  for (auto& state_ite : states) {
-    State state; // current base
-    state = state_ite;
+  std::vector<std::vector<ConfigKey>> all_neighbors_config_key;
+  std::mutex all_neighbors_config_key_mutex;
+
+  support::parallel_for(0, states.size(), [this, &states, &pz_factors, &sketches, &v_splitMeta_info, &all_neighbors_config_key, &all_neighbors_config_key_mutex](int index) {
+    State state = states[index];
     std::unordered_set<std::string> neighbors_remove_dup;
     std::unordered_map<std::string, std::vector<int>> current_base = GetStateFactor(search_task, state);
-    std::vector<ConfigKey> neighbors_conf_key; //store all the neighbors' config key
+    std::vector<ConfigKey> neighbors_conf_key;  // store all the neighbors' config key
 
     // avoid base state been added to neighbors
     std::vector<splitMeta*> base_meta_info = GenerateSplitMeta(this, state);
@@ -957,7 +958,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     std::unordered_map<std::string, std::vector<int>> current_config = GetStateFactor(search_task, state);
     std::vector<ConfigKey> direct_neighbors_config_key = GetDirectNeighbors(current_config, pz_factors, sketches, v_splitMeta_info);
 
-    for (auto n : direct_neighbors_config_key){
+    for (auto n : direct_neighbors_config_key) {
       const auto state_str = ConfigKey2string(n);
       if (neighbors_remove_dup.count(state_str) == 0) {
         neighbors_remove_dup.insert(state_str);
@@ -966,10 +967,10 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
     }
 
     // get diagnal neighbors
-    for (auto n : direct_neighbors_config_key){
+    for (auto n : direct_neighbors_config_key) {
       std::unordered_map<std::string, std::vector<int>> current_map = ConfigKey2Map(n, v_splitMeta_info);
       std::vector<ConfigKey> tmp = GetDirectNeighbors(current_map, pz_factors, sketches, v_splitMeta_info);
-      for (auto t : tmp){
+      for (auto t : tmp) {
         const auto state_str = ConfigKey2string(t);
         if (neighbors_remove_dup.count(state_str) == 0) {
           neighbors_remove_dup.insert(state_str);
@@ -978,8 +979,11 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
       }
     }
 
-    all_neighbors_config_key.push_back(neighbors_conf_key);
-  }
+    {
+      std::lock_guard<std::mutex> lock(all_neighbors_config_key_mutex);
+      all_neighbors_config_key.push_back(neighbors_conf_key);
+    }
+  });
 
   int idx = 0;
   for (auto& state_ite : states) {
@@ -1013,7 +1017,6 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 *  @return: local mins and next states
 */
 Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states) {
-    auto tic_begin = std::chrono::high_resolution_clock::now();
 
     // Clear next_states
     next_states->clear();
@@ -1090,8 +1093,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
             if (i == 0) continue;  // skip base state
 
             std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
-            const auto state_str =
-                state_to_string(local_path[i], v_splitMeta_info, search_task);
+            const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
 
             // add unvisited equal pscore states to next_states
             if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] &&
@@ -1107,10 +1109,8 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
         }
       } else {
         // General case, better neighbour to move
-        std::vector<splitMeta*> v_splitMeta_info =
-            GenerateSplitMeta(this, local_path[best_neighbour_index]);
-        const auto state_str =
-            state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
+        std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[best_neighbour_index]);
+        const auto state_str = state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
         std::lock_guard<std::mutex> lock_visited(visited_mutex);
         {
           // if best_neighbour_index != 0, it has never been visited, no need to check visited,
@@ -1125,11 +1125,6 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
         }
       }
     });
-
-    double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
-                        std::chrono::high_resolution_clock::now() - tic_begin).count();
-    std::cout << "NodeMove Time elapsed: " << std::fixed << std::setprecision(5) << duration << std::endl;
-    // std::cout << "[NodeMove] Number of next_states : " << next_states->size() << std::endl;
 
     // TO measure local min
     return local_min;
@@ -1220,7 +1215,7 @@ std::unordered_map<std::string, std::vector<int>>  SketchPolicyNode::GetFactorIn
 }
 
 Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states, bool firsttime_random) {
-  // std::cout << "[SearchOneRoundPruePredict] next_states size: " << next_states->size() << std::endl;
+  // std::cout << "[SearchOneRoundPruePredict] searching" << next_states->size() << std::endl;
   // PrintTitle("Search", verbose);
   // 1. Generate sketches
   if (sketch_cache_.empty()) {
@@ -1240,15 +1235,9 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   Array<State> init_population;
   if (firsttime_random){
     // Sample the init population
-    auto tic_begin = std::chrono::high_resolution_clock::now();
+    
     init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
-    double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
-                            std::chrono::high_resolution_clock::now() - tic_begin)
-                            .count();
-    StdCout(verbose) << "SampleCUDAPopulation Time elapsed: " << std::fixed
-                      << std::setprecision(5) << duration << std::endl;
-
-    auto tic_begin1 = std::chrono::high_resolution_clock::now();
+    
     // push num_random_states random states into init_population as start point
     Array<State> base_population;
     for (auto state : init_population){
@@ -1262,11 +1251,6 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
         }
       }
     }
-    double duration1 = std::chrono::duration_cast<std::chrono::duration<double>>(
-                            std::chrono::high_resolution_clock::now() - tic_begin1)
-                            .count();
-    StdCout(verbose) << "GenerateSplitMeta Time elapsed: " << std::fixed
-                      << std::setprecision(5) << duration1 << std::endl;
     init_population = base_population;
   }
   else{
@@ -1277,17 +1261,9 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
   }
 
   std::cout << "Base nodes #" << init_population.size() << std::endl;
-  PrintTitle("Generate Neighbours", verbose);
-  auto tic_begin2 = std::chrono::high_resolution_clock::now();
-
+  // PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
-  
-  double duration2 = std::chrono::duration_cast<std::chrono::duration<double>>(
-                            std::chrono::high_resolution_clock::now() - tic_begin2)
-                            .count();
-  StdCout(verbose) << "GenerateNeighbours Time elapsed: " << std::fixed
-                      << std::setprecision(5) << duration2 << std::endl;
-  PrintTitle("Node Move", verbose);
+  // PrintTitle("Node Move", verbose);
 
   return NodeMove(neighbour_table, next_states);
 }
