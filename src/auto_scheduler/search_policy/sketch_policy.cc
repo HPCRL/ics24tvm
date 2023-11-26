@@ -255,7 +255,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       inputs = PackState(initStatesForModel, sample_init_min_pop_);
 
       if (!inputs.empty()) {
-        std::vector<float> p_scores = {0.0};
+        std::vector<float> p_scores;
+        p_scores.reserve(inputs.size());
+        for (int i = 0; i < inputs.size(); ++i) {
+          p_scores.push_back(0.0);
+        }
 
         // use xMeasure to avoid write into the json log
         results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
@@ -300,7 +304,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         if (!inputs.empty()) {
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
-          std::vector<float> p_scores = {0.0};
+          std::vector<float> p_scores;
+          p_scores.reserve(inputs.size());
+          for (int i = 0; i < inputs.size(); ++i) {
+            p_scores.push_back(0.0);
+          }
           results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
 
           auto t_begin = std::chrono::high_resolution_clock::now();
@@ -323,7 +331,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         if (!inputs.empty()) {
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
-          std::vector<float> p_scores = {0.0};
+          std::vector<float> p_scores;
+          p_scores.reserve(inputs.size());
+          for (int i = 0; i < inputs.size(); ++i) {
+            p_scores.push_back(0.0);
+          }
           results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
 
           auto t_begin = std::chrono::high_resolution_clock::now();
