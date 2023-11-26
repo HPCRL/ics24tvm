@@ -252,19 +252,20 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       initStatesForModel = SampleInitPopulation(sketch_cache_);
       initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
       // sample to update the model
-      inputs = PackState(initStatesForModel, initStatesForModel.size());
+      inputs = PackState(initStatesForModel, sample_init_min_pop_);
 
       if (!inputs.empty()) {
-        std::vector<float> r_scores = {0.0};
+        std::vector<float> p_scores = {0.0};
 
         // use xMeasure to avoid write into the json log
-        results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
+        results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
 
         auto t_begin = std::chrono::high_resolution_clock::now();
 
         // Retrain the cost model before the next search round
         PrintTitle("Model trained for the neighbor search", verbose);
         program_cost_model->Update(inputs, results);
+        model_age += 1;
 
         PrintTimeElapsed(t_begin, "training", verbose);
       }
