@@ -242,6 +242,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
     int init_num = 16;
+    int model_age = 0;
 
     // generate a model based on random sampling and measure them
     if (ct == 0){ // just run it at the first time
@@ -251,19 +252,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       initStatesForModel = SampleInitPopulation(sketch_cache_);
       initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
       // sample to update the model
-      inputs = PackStateForModel(initStatesForModel, initStatesForModel.size());
+      inputs = PackState(initStatesForModel, initStatesForModel.size());
 
-      int model_age = 1;
-      std::vector<float> r_scores;
       if (!inputs.empty()) {
-        r_scores.reserve(inputs.size());
-        Array<State> measure_states;
-        measure_states.reserve(inputs.size());
-        for (size_t j = 0; j < inputs.size(); ++j) {
-            State tmp = inputs[j].get()->state;
-            measure_states.push_back(tmp);
-        }
-        program_cost_model->Predict(search_task, measure_states, &r_scores);
+        std::vector<float> r_scores = {0.0};
 
         // use xMeasure to avoid write into the json log
         results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, r_scores, model_age);
@@ -307,13 +299,15 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         if (!inputs.empty()) {
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
-          results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+          std::vector<float> p_scores = {0.0};
+          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
 
           auto t_begin = std::chrono::high_resolution_clock::now();
 
           // Retrain the cost model before the next search round
           PrintTitle("Train cost model", verbose);
           program_cost_model->Update(inputs, results);
+          model_age += 1;
 
           PrintTimeElapsed(t_begin, "training", verbose);
         }
@@ -328,13 +322,15 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         if (!inputs.empty()) {
           // Measure candidate states
           PrintTitle("Measure Local MIN", verbose);
-          results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+          std::vector<float> p_scores = {0.0};
+          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
 
           auto t_begin = std::chrono::high_resolution_clock::now();
 
           // Retrain the cost model before the next search round
           PrintTitle("Train cost model", verbose);
           program_cost_model->Update(inputs, results);
+          model_age += 1;
 
           PrintTimeElapsed(t_begin, "training", verbose);
         }
@@ -2070,7 +2066,6 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
-  measured_states_set_.clear();
   std::cout << "PackState inputs size: " << inputs.size() << std::endl;
   return inputs;
 }
