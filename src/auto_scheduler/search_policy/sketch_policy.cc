@@ -301,7 +301,25 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       if (next_states.empty() &&  local_min_set.size() != 0){
         //No more neighbour explore but candidate not hit threshold
         // CALL measure
+        local_min_set = search_task->compute_dag.InferBound(local_min_set);
+        inputs = PackState(local_min_set, n_trials - ct);
+        local_min_set.clear();
+        if (!inputs.empty()) {
+          // Measure candidate states
+          PrintTitle("Measure Local MIN", verbose);
+          results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+
+          auto t_begin = std::chrono::high_resolution_clock::now();
+
+          // Retrain the cost model before the next search round
+          PrintTitle("Train cost model", verbose);
+          program_cost_model->Update(inputs, results);
+
+          PrintTimeElapsed(t_begin, "training", verbose);
+        }
+        ct += inputs.size();
       }
+      
       if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure){
         // once local_min_set is large enough, measure them
         local_min_set = search_task->compute_dag.InferBound(local_min_set);
@@ -924,9 +942,9 @@ std::string ConfigKey2string(const ConfigKey& conf) {
 Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info){
   Array<Array<State>> neighbour_table;
   std::vector<std::vector<ConfigKey>> all_neighbors_config_key;
-  std::mutex all_neighbors_config_key_mutex;
+  all_neighbors_config_key.resize(states.size());
 
-  support::parallel_for(0, states.size(), [this, &states, &pz_factors, &sketches, &v_splitMeta_info, &all_neighbors_config_key, &all_neighbors_config_key_mutex](int index) {
+  support::parallel_for(0, states.size(), [this, &states, &pz_factors, &sketches, &v_splitMeta_info, &all_neighbors_config_key](int index) {
     State state = states[index];
     std::unordered_set<std::string> neighbors_remove_dup;
     std::unordered_map<std::string, std::vector<int>> current_base = GetStateFactor(search_task, state);
@@ -958,12 +976,7 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
         }
       }
     }
-
-    // YUFAN: NO need lock and can create thread-local data field and merge.
-    {
-      std::lock_guard<std::mutex> lock(all_neighbors_config_key_mutex);
-      all_neighbors_config_key.push_back(neighbors_conf_key);
-    }
+    all_neighbors_config_key[index] = neighbors_conf_key;
   });
 
   int idx = 0;
@@ -1004,9 +1017,9 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
     next_states->clear();
 
     Array<State> local_min;
-    std::mutex next_states_mutex, visited_mutex, local_min_mutex;
-
-    // YUFAN: next_states_mutex, local_min_mutex NO need lock, hurts performance. REMOVE
+    std::mutex visited_mutex;
+    std::vector<Array<State>> local_next_states(neighbour_table.size());
+    std::vector<Array<State>> local_mins(neighbour_table.size());  
 
     //calculate the pop_scores for every path, ready for parallel
     std::vector<std::vector<float>> vec_pop_scores;
@@ -1021,13 +1034,10 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
       vec_pop_scores.push_back(tmp);
     }
 
-    support::parallel_for(0, neighbour_table.size(), [this, &neighbour_table, &vec_pop_scores, next_states, &local_min, &next_states_mutex, &visited_mutex, &local_min_mutex](int index) {
+    support::parallel_for(0, neighbour_table.size(), [this, &neighbour_table, &vec_pop_scores, &visited_mutex, &local_next_states, &local_mins](int index) {
       const auto local_path = neighbour_table[index];
-
-      if (local_path.empty()) {
-        std::cout << "path is empty" << std::endl;
-        return;
-      }
+      Array<State>& thread_local_next_states = local_next_states[index];
+      Array<State>& thread_local_min = local_mins[index];
 
       std::vector<float> pop_scores = vec_pop_scores[index];
 
@@ -1064,10 +1074,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
       // local min or not
       if (best_neighbour_index == 0) {
         if (real_local_min) {  // no absolute better pscore neighbor, real local min
-          {
-            std::lock_guard<std::mutex> lock(local_min_mutex);
-            local_min.push_back(local_path[0]);  // send out local_min to measure
-          }
+          thread_local_min.push_back(local_path[0]);  // send out local_min to measure
 
           // may have equal pscore neighbors
           // in case we miss any near boundary states, equal best pscore states should also be explored
@@ -1084,8 +1091,7 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
               {
                 visited.insert(state_str);  // add all next_states to visited, avoid circular
               }
-              std::lock_guard<std::mutex> lock(next_states_mutex);
-              { next_states->push_back(local_path[i]); }
+              thread_local_next_states.push_back(local_path[i]);
             }
           }
         }
@@ -1098,15 +1104,23 @@ Array<State> SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table, Arr
           // if best_neighbour_index != 0, it has never been visited, no need to check if it's in visited, direct insert
           visited.insert(state_str);  // add all next_states to visited, avoid circular
         }
-
-        std::lock_guard<std::mutex> lock(next_states_mutex);
-        {
-          next_states->push_back(local_path[best_neighbour_index]);  // move to better predict neighbour
-        }
+        thread_local_next_states.push_back(local_path[best_neighbour_index]);
       }
     });
 
-    // measure local min
+    for (auto& thread_states : local_next_states) {
+        for (auto& state : thread_states) {
+            next_states->push_back(state);
+        }
+    }
+
+    for (auto& thread_min : local_mins) {
+        for (auto& min_state : thread_min) {
+            local_min.push_back(min_state);
+        }
+    }
+
+    // return local min
     return local_min;
 }
 
