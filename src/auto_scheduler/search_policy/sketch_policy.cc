@@ -1261,7 +1261,7 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, 
     }
   }
 
-  std::cout << "Base nodes #" << init_population.size() << std::endl;
+  // std::cout << "Base nodes #" << init_population.size() << std::endl;
   // PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table = GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info); 
   // PrintTitle("Node Move", verbose);
