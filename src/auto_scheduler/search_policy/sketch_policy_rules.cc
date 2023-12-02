@@ -974,14 +974,7 @@ PopulationGenerationRule::ResultKind InitThreadBind::Apply(SketchPolicyNode* pol
       Iterator fused = state->fuse(stage_id, (*state)->stages[stage_id]->iters);
       if (fused->range.defined()) {
         int ext = GetIntImm(fused->range->extent);
-        if (ext % 4 == 0) {
-          const auto& iters0 = state->split(stage_id, fused, {Integer(4)});
-          state->vectorize(stage_id, iters0[1]);
-          // Follow split to keep a same thread extent with the root stage
-          const auto& iters1 =
-              state->follow_fused_split(stage_id, iters0[0], spatial_split_step_ids, 1, true);
-          state->bind(stage_id, iters1[1], IteratorAnnotation::kThreadX);
-        } else if (ext % 2 == 0) {
+        if (ext % 2 == 0) {
           const auto& iters0 = state->split(stage_id, fused, {Integer(2)});
           state->vectorize(stage_id, iters0[1]);
           // Follow split to keep a same thread extent with the root stage
