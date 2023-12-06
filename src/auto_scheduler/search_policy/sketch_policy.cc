@@ -962,7 +962,8 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(Array<State> states, st
 
     // avoid base state been added to neighbors
     std::vector<splitMeta*> base_meta_info = GenerateSplitMeta(this, state);
-    neighbors_remove_dup.insert(state_to_string(state, base_meta_info, search_task));
+    const auto base_str = ConfigKey2string(map_to_configkey(current_base, base_meta_info));
+    neighbors_remove_dup.insert(base_str);
 
     // get direct neighbors
     std::vector<ConfigKey> direct_neighbors_config_key = GetDirectNeighbors(current_base, pz_factors, sketches, v_splitMeta_info);
