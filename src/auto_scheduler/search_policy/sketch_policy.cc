@@ -273,7 +273,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
         PrintTimeElapsed(t_begin, "training", verbose);
       }
-      ct += sample_init_min_pop_;
+      ct += inputs.size();
     }
     
     while (ct < n_trials) {
