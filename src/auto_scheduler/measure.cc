@@ -298,12 +298,12 @@ Array<MeasureResult> ProgramMeasurerNode::Measure(const SearchTask& task,
                           << input_batch[j]->state << "\n";
     }
 
-    // Call callback functions
-    if (callbacks) {
-      for (const auto& callback : callbacks.value()) {
-        callback->Callback(policy, input_batch, result_batch);
-      }
-    }
+    // // Call callback functions
+    // if (callbacks) {
+    //   for (const auto& callback : callbacks.value()) {
+    //     callback->Callback(policy, input_batch, result_batch);
+    //   }
+    // }
 
     // Store result batch
     for (auto& res : result_batch) {

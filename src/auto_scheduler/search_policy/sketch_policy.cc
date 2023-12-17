@@ -252,17 +252,12 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       initStatesForModel = SampleInitPopulation(sketch_cache_);
       initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
       // sample to update the model
-      inputs = PackState(initStatesForModel, sample_init_min_pop_);
+      inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
 
       if (!inputs.empty()) {
-        std::vector<float> p_scores;
-        p_scores.reserve(inputs.size());
-        for (int i = 0; i < inputs.size(); ++i) {
-          p_scores.push_back(0.0);
-        }
 
         // use xMeasure to avoid write into the json log
-        results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores, model_age);
+        results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
 
         auto t_begin = std::chrono::high_resolution_clock::now();
 
@@ -273,7 +268,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
         PrintTimeElapsed(t_begin, "training", verbose);
       }
-      ct += inputs.size();
     }
     
     while (ct < n_trials) {
@@ -2051,7 +2045,7 @@ std::string SketchPolicyNode::state_to_string(const State& state, std::vector<sp
   return res;
 }
 
-/* Pack state into MeasureInput and clear measured_states_set_
+/* Pack state into MeasureInput and clear local_measured_states_set_
 *  @param best_states: states waiting to be measured
 *  @return: MeasureInput
 */
@@ -2067,6 +2061,7 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     offset_best_upperbound = best_states.size();
   }
 
+  std::unordered_set<std::string> local_measured_states_set_;
   while (offset_best < offset_best_upperbound ){
     State state;
     state = best_states[offset_best++];
@@ -2076,8 +2071,8 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     std::vector<splitMeta*> v_splitMeta_info;
     v_splitMeta_info = GenerateSplitMeta(this, state);
     std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
-    if (!measured_states_set_.count(state_str)) {
-      measured_states_set_.insert(std::move(state_str));// just for remove dup, will clear later
+    if (!local_measured_states_set_.count(state_str)) {
+      local_measured_states_set_.insert(std::move(state_str));// just for remove dup, will clear later
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
