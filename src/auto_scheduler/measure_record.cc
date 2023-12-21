@@ -357,6 +357,7 @@ void ReadMeasureRecord(const std::string& str, MeasureInputNode* inp, MeasureRes
       reader.Read(inp);
     } else if (key == "r") {
       reader.Read(res);
+      break;
     } else if (key == "v") {
       reader.Read(log_version);
     } else {
