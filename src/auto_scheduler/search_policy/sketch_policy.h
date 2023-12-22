@@ -180,7 +180,7 @@ bool isConfigKeyInTable(int key) ;
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
-  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
+  void NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
     Array<MeasureInput>* total_inputs,
      Array<MeasureResult>* total_results,
      int model_age, ProgramMeasurer measurer);

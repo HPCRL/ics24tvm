@@ -239,7 +239,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     bool firsttime_random = true;
     int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
-    int init_num = 16;
+    int init_num = 1;
     int model_age = 0;
 
     // generate a model based on random sampling and measure them
@@ -281,70 +281,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       } else {
         firsttime_random = false;
       }
-
-      // if (!local_min_best_states
-      //          .empty()) {  // if we get some local min states, add them to local_min_set
-      //   for (auto localmin : local_min_best_states) {
-      //     local_min_set.push_back(localmin);
-      //   }
-      // }
-
-      // if (next_states.empty() && local_min_set.size() != 0) {
-      //   // No more neighbour explore but candidate not hit threshold
-      //   //  CALL measure
-      //   local_min_set = search_task->compute_dag.InferBound(local_min_set);
-      //   inputs = PackState(local_min_set, n_trials - ct);
-      //   local_min_set.clear();
-      //   if (!inputs.empty()) {
-      //     // Measure candidate states
-      //     PrintTitle("Measure Local MIN", verbose);
-      //     std::vector<float> p_scores;
-      //     p_scores.reserve(inputs.size());
-      //     for (int i = 0; i < inputs.size(); ++i) {
-      //       p_scores.push_back(0.0);
-      //     }
-      //     results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
-      //                                  model_age);
-
-      //     auto t_begin = std::chrono::high_resolution_clock::now();
-
-      //     // Retrain the cost model before the next search round
-      //     PrintTitle("Train cost model", verbose);
-      //     program_cost_model->Update(inputs, results);
-      //     model_age += 1;
-
-      //     PrintTimeElapsed(t_begin, "training", verbose);
-      //   }
-      //   ct += inputs.size();
-      // }
-
-      // if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure) {
-      //   // once local_min_set is large enough, measure them
-      //   local_min_set = search_task->compute_dag.InferBound(local_min_set);
-      //   inputs = PackState(local_min_set, n_trials - ct);
-      //   local_min_set.clear();
-      //   if (!inputs.empty()) {
-      //     // Measure candidate states
-      //     PrintTitle("Measure Local MIN", verbose);
-      //     std::vector<float> p_scores;
-      //     p_scores.reserve(inputs.size());
-      //     for (int i = 0; i < inputs.size(); ++i) {
-      //       p_scores.push_back(0.0);
-      //     }
-      //     results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
-      //                                  model_age);
-
-      //     auto t_begin = std::chrono::high_resolution_clock::now();
-
-      //     // Retrain the cost model before the next search round
-      //     PrintTitle("Train cost model", verbose);
-      //     program_cost_model->Update(inputs, results);
-      //     model_age += 1;
-
-      //     PrintTimeElapsed(t_begin, "training", verbose);
-      //   }
-      //   ct += inputs.size();
-      // }  // End of threshold measure
 
     }  // End of while loop
 
@@ -1182,7 +1118,7 @@ ConfigKey SketchPolicyNode::RandomMutate(
  *  @param next: next states
  *  @return: local mins and next states
  */
-Array<State> SketchPolicyNode::NodeMove(
+void SketchPolicyNode::NodeMove(
     Array<Array<State>> neighbour_table, Array<State>* next_states,
     std::unordered_map<std::string, std::vector<int>> pz_factors, Array<MeasureInput>* total_inputs,
     Array<MeasureResult>* total_results, int model_age, ProgramMeasurer measurer) {
