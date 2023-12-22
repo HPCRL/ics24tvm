@@ -269,79 +269,82 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
     while (ct < n_trials) {
       // create new predict based search
-      local_min_best_states = SearchOneRoundPruePredict(init_num, &next_states, firsttime_random);
+      // local_min_best_states =
+
+      SearchOneRoundPruePredict(init_num, measurer, &next_states, firsttime_random, &model_age);
       // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       if (next_states.empty()) {
         // NO more neighbour to explore, resample.
         firsttime_random = true;
+        ct++;
       } else {
         firsttime_random = false;
       }
 
-      if (!local_min_best_states
-               .empty()) {  // if we get some local min states, add them to local_min_set
-        for (auto localmin : local_min_best_states) {
-          local_min_set.push_back(localmin);
-        }
-      }
+      // if (!local_min_best_states
+      //          .empty()) {  // if we get some local min states, add them to local_min_set
+      //   for (auto localmin : local_min_best_states) {
+      //     local_min_set.push_back(localmin);
+      //   }
+      // }
 
-      if (next_states.empty() && local_min_set.size() != 0) {
-        // No more neighbour explore but candidate not hit threshold
-        //  CALL measure
-        local_min_set = search_task->compute_dag.InferBound(local_min_set);
-        inputs = PackState(local_min_set, n_trials - ct);
-        local_min_set.clear();
-        if (!inputs.empty()) {
-          // Measure candidate states
-          PrintTitle("Measure Local MIN", verbose);
-          std::vector<float> p_scores;
-          p_scores.reserve(inputs.size());
-          for (int i = 0; i < inputs.size(); ++i) {
-            p_scores.push_back(0.0);
-          }
-          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
-                                       model_age);
+      // if (next_states.empty() && local_min_set.size() != 0) {
+      //   // No more neighbour explore but candidate not hit threshold
+      //   //  CALL measure
+      //   local_min_set = search_task->compute_dag.InferBound(local_min_set);
+      //   inputs = PackState(local_min_set, n_trials - ct);
+      //   local_min_set.clear();
+      //   if (!inputs.empty()) {
+      //     // Measure candidate states
+      //     PrintTitle("Measure Local MIN", verbose);
+      //     std::vector<float> p_scores;
+      //     p_scores.reserve(inputs.size());
+      //     for (int i = 0; i < inputs.size(); ++i) {
+      //       p_scores.push_back(0.0);
+      //     }
+      //     results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
+      //                                  model_age);
 
-          auto t_begin = std::chrono::high_resolution_clock::now();
+      //     auto t_begin = std::chrono::high_resolution_clock::now();
 
-          // Retrain the cost model before the next search round
-          PrintTitle("Train cost model", verbose);
-          program_cost_model->Update(inputs, results);
-          model_age += 1;
+      //     // Retrain the cost model before the next search round
+      //     PrintTitle("Train cost model", verbose);
+      //     program_cost_model->Update(inputs, results);
+      //     model_age += 1;
 
-          PrintTimeElapsed(t_begin, "training", verbose);
-        }
-        ct += inputs.size();
-      }
+      //     PrintTimeElapsed(t_begin, "training", verbose);
+      //   }
+      //   ct += inputs.size();
+      // }
 
-      if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure) {
-        // once local_min_set is large enough, measure them
-        local_min_set = search_task->compute_dag.InferBound(local_min_set);
-        inputs = PackState(local_min_set, n_trials - ct);
-        local_min_set.clear();
-        if (!inputs.empty()) {
-          // Measure candidate states
-          PrintTitle("Measure Local MIN", verbose);
-          std::vector<float> p_scores;
-          p_scores.reserve(inputs.size());
-          for (int i = 0; i < inputs.size(); ++i) {
-            p_scores.push_back(0.0);
-          }
-          results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
-                                       model_age);
+      // if (local_min_set.size() + ct >= n_trials || local_min_set.size() >= max_num_for_measure) {
+      //   // once local_min_set is large enough, measure them
+      //   local_min_set = search_task->compute_dag.InferBound(local_min_set);
+      //   inputs = PackState(local_min_set, n_trials - ct);
+      //   local_min_set.clear();
+      //   if (!inputs.empty()) {
+      //     // Measure candidate states
+      //     PrintTitle("Measure Local MIN", verbose);
+      //     std::vector<float> p_scores;
+      //     p_scores.reserve(inputs.size());
+      //     for (int i = 0; i < inputs.size(); ++i) {
+      //       p_scores.push_back(0.0);
+      //     }
+      //     results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this), inputs, p_scores,
+      //                                  model_age);
 
-          auto t_begin = std::chrono::high_resolution_clock::now();
+      //     auto t_begin = std::chrono::high_resolution_clock::now();
 
-          // Retrain the cost model before the next search round
-          PrintTitle("Train cost model", verbose);
-          program_cost_model->Update(inputs, results);
-          model_age += 1;
+      //     // Retrain the cost model before the next search round
+      //     PrintTitle("Train cost model", verbose);
+      //     program_cost_model->Update(inputs, results);
+      //     model_age += 1;
 
-          PrintTimeElapsed(t_begin, "training", verbose);
-        }
-        ct += inputs.size();
-      }  // End of threshold measure
+      //     PrintTimeElapsed(t_begin, "training", verbose);
+      //   }
+      //   ct += inputs.size();
+      // }  // End of threshold measure
 
     }  // End of while loop
 
@@ -1093,7 +1096,8 @@ ConfigKey SketchPolicyNode::RandomMutate(
     std::shuffle(std::begin(dim_mask), std::end(dim_mask), rng);
     std::random_device rd;   // obtain a random number from hardware
     std::mt19937 gen(rd());  // seed the generator
-    std::uniform_int_distribution<> distr(3, cur_config_index.size());  // define the range --> more than 2
+    std::uniform_int_distribution<> distr(
+        3, cur_config_index.size());  // define the range --> more than 2
     int num_changes = distr(gen);
 
     // num of dim changes
@@ -1180,9 +1184,12 @@ ConfigKey SketchPolicyNode::RandomMutate(
  */
 Array<State> SketchPolicyNode::NodeMove(
     Array<Array<State>> neighbour_table, Array<State>* next_states,
-    std::unordered_map<std::string, std::vector<int>> pz_factors) {
+    std::unordered_map<std::string, std::vector<int>> pz_factors, Array<MeasureInput>* total_inputs,
+    Array<MeasureResult>* total_results, int model_age, ProgramMeasurer measurer) {
   // Clear next_states
   next_states->clear();
+  total_inputs->clear();
+  total_results->clear();
 
   Array<State> local_min;
   std::mutex visited_mutex;
@@ -1210,128 +1217,154 @@ Array<State> SketchPolicyNode::NodeMove(
 
     if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
       // Invalid and no neighbors
+      // TODO: will resample init rethink logic
       continue;
     }
 
-    // TODO(Chendi): sorted by score
-    // Determine if the neighbor should be a local minimum
-    // path[0] : base state
-    // path[1:] : neighbour states
     float base_score = pop_scores[0];
-    float best_score = base_score;
-    int best_neighbour_index = 0;
-    bool real_local_min_dd_hop = true;
+    std::vector<float> neighbour_scores(pop_scores.begin() + 1, pop_scores.end());
+    std::vector<int> indices = Argsort(neighbour_scores);
 
-    for (int i = 1; i < pop_scores.size(); i++) {
-      std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
-      const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
-
-      // check if it is a real local min, all neighbor pscores should be not better than base
-      // pscore
-      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
-        real_local_min_dd_hop = false;
+    int max_idx = 0;
+    int window_start = 0;
+    int topn = 3;
+    while (max_idx == 0 && window_start + topn <= local_path.size() - 1) {
+      Array<State> good_from_predict;
+      std::vector<float> window_score;
+      good_from_predict.push_back(local_path[0]);
+      window_score.push_back(pop_scores[0]);
+      for (int i = 0; i < topn; i++) {
+        good_from_predict.push_back(local_path[indices[i+window_start]]);
+        window_score.push_back(neighbour_scores[indices[i+window_start]]);
       }
-      // find a better one, update best_score
-      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score && visited.count(state_str) == 0) {
-        best_neighbour_index = i;
-        best_score = pop_scores[i];
+      window_start += topn;
+
+      good_from_predict = search_task->compute_dag.InferBound(good_from_predict);
+      Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
+      Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
+                                                        inputs, window_score, model_age);
+
+      for (auto in : inputs) total_inputs->push_back(in);
+
+      for (auto res : results) total_results->push_back(res);
+
+      // get all the gflops for each path
+      std::vector<float> gflops_per_path;
+      std::cout << "gflops: ";
+      int iter = 0;
+      bool has_valid = false;
+      for (auto res : results) {
+        float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
+        float gflops = flops / 1e9;
+        if (gflops - 0.0 > 1e-5) {
+          has_valid = true;
+        }
+        gflops_per_path.push_back(gflops);
+        std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
       }
-    }
+      std::cout << std::endl;
+      if (!has_valid) {
+        std::cout << "no valid gflops, re-sample" << std::endl;
+        continue;
+      }
 
-    // local min or not
-    if (best_neighbour_index == 0) {
-      // may have equal pscore neighbors
-      // in case we miss any near boundary states, equal best pscore states should also be
-      // explored
-      for (int i = 0; i < pop_scores.size(); i++) {
-        if (i == 0) continue;  // skip base state
-
-        std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
-        const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
-
-        // add unvisited equal pscore states to next_states
-        if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] &&
-            visited.count(state_str) == 0) {
-          visited.insert(state_str);  // add all next_states to visited, avoid circular
-          thread_local_next_states.push_back(local_path[i]);
+      // find the best gflops in path
+      float max_flops = gflops_per_path[0];
+      for (int i = 1; i < gflops_per_path.size(); i++) {
+        if (gflops_per_path[i] > max_flops) {
+          max_flops = gflops_per_path[i];
+          max_idx = i;
         }
       }
 
-      if (real_local_min_dd_hop) {  // no absolute better pscore neighbor, real local min
-        std::map<int, ConfigKey> tmp_conf_table;
-        int idx_conf_table = 0;
-        std::vector<splitMeta*> v_splitMeta_info;
-        v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
-        const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
-        std::unordered_map<std::string, std::vector<int>> current_config =
-            GetStateFactor(search_task, local_path[0]);
-        for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
-          ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
-          // directly add to tmp_conf_table, will check if it is in visited
-          tmp_conf_table[idx_conf_table++] = next_config_key;
+      if (max_idx != 0) {
+        // find a fast neigbour, leave;
+        next_states->push_back(good_from_predict[max_idx]);
+        return;
+      }
+    } // end regular Direct+Diag
+
+    if (max_idx == 0) {  // random n hop
+      std::map<int, ConfigKey> tmp_conf_table;
+      int idx_conf_table = 0;
+      std::vector<splitMeta*> v_splitMeta_info;
+      v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
+      const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
+      std::unordered_map<std::string, std::vector<int>> current_config =
+          GetStateFactor(search_task, local_path[0]);
+      for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
+        ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
+        // directly add to tmp_conf_table, will check if it is in visited
+        tmp_conf_table[idx_conf_table++] = next_config_key;
+      }
+
+      Array<State> sampled_states =
+          SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+
+      std::vector<float> pop_scores_nhop;
+      pop_scores_nhop.reserve(sampled_states.size());
+      program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
+
+      int n_hop_max_idx = 0;
+      int n_hop_window_start = 0;
+      int topn = 3;
+      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
+        Array<State> good_from_predict;
+        std::vector<float> window_score;
+        good_from_predict.push_back(local_path[0]);
+        window_score.push_back(pop_scores[0]);
+        for (int i = 0; i < topn; i++) {
+          good_from_predict.push_back(local_path[indices[i+n_hop_window_start]]);
+          window_score.push_back(neighbour_scores[indices[i+n_hop_window_start]]);
         }
-        // std::cout <<"size of tmp_conf_table: " << tmp_conf_table.size() << std::endl;
-        // TODO: what if no 30;
+        n_hop_window_start += topn;
 
-        Array<State> sampled_states =
-            SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+        good_from_predict = search_task->compute_dag.InferBound(good_from_predict);
+        Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
+        Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
+                                                          inputs, window_score, model_age);
 
-        std::vector<float> pop_scores_nhop;
-        pop_scores_nhop.reserve(sampled_states.size());
+        for (auto in : inputs) total_inputs->push_back(in);
+        for (auto res : results) total_results->push_back(res);
 
-        program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
+        // get all the gflops for each path
+        std::vector<float> gflops_per_path;
+        std::cout << "gflops: ";
+        int iter = 0;
+        bool has_valid = false;
+        for (auto res : results) {
+          float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
+          float gflops = flops / 1e9;
+          if (gflops - 0.0 > 1e-5) {
+            has_valid = true;
+          }
+          gflops_per_path.push_back(gflops);
+          std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
+        }
+        std::cout << std::endl;
+        if (!has_valid) {
+          std::cout << "no valid gflops, re-sample" << std::endl;
+          continue;
+        }
 
-        // check n hop stuck
-        bool real_local_min = true;
-        for (int i = 0; i < pop_scores_nhop.size(); i++) {
-          std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, sampled_states[i]);
-          const auto state_str = state_to_string(sampled_states[i], v_splitMeta_info, search_task);
-          // find a better one, update best_score
-          if (pop_scores_nhop[i] > -1e10 && pop_scores_nhop[i] > best_score &&
-              visited.count(state_str) == 0) {
-            real_local_min = false;
-            best_neighbour_index = i;
-            best_score = pop_scores_nhop[i];
+        // find the best gflops in path
+        float max_flops = gflops_per_path[0];
+        for (int i = 1; i < gflops_per_path.size(); i++) {
+          if (gflops_per_path[i] > max_flops) {
+            max_flops = gflops_per_path[i];
+            n_hop_max_idx = i;
           }
         }
 
-        // after test n hop
-        if (real_local_min) {
-          thread_local_min.push_back(local_path[0]);
-        } else {
-          // General case, better neighbour to move
-          std::vector<splitMeta*> v_splitMeta_info =
-              GenerateSplitMeta(this, sampled_states[best_neighbour_index]);
-          const auto state_str =
-              state_to_string(sampled_states[best_neighbour_index], v_splitMeta_info, search_task);
-          visited.insert(state_str);  // add all next_states to visited, avoid circular
-          thread_local_next_states.push_back(sampled_states[best_neighbour_index]);
+        if (n_hop_max_idx != 0) {
+          // find a fast neigbour, leave;
+          next_states->push_back(good_from_predict[n_hop_max_idx]);
+          return;
         }
-      }
-    } else {
-      // General case, better neighbour to move
-      std::vector<splitMeta*> v_splitMeta_info =
-          GenerateSplitMeta(this, local_path[best_neighbour_index]);
-      const auto state_str =
-          state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
-      visited.insert(state_str);  // add all next_states to visited, avoid circular
-      thread_local_next_states.push_back(local_path[best_neighbour_index]);
-    }
-  }
+      } //end while loop of nhop
+    } //end nhop test
 
-  for (auto& thread_states : local_next_states) {
-    for (auto& state : thread_states) {
-      next_states->push_back(state);
-    }
-  }
-
-  for (auto& thread_min : local_mins) {
-    for (auto& min_state : thread_min) {
-      local_min.push_back(min_state);
-    }
-  }
-  
-  return local_min;
+  }//fake for loop for neighbour table
 }
 
 std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInfo(
@@ -1418,9 +1451,9 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
   return res;
 }
 
-Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states,
-                                                         Array<State>* next_states,
-                                                         bool firsttime_random) {
+void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer,
+                                                 Array<State>* next_states, bool firsttime_random,
+                                                 int* model_age) {
   // PrintTitle("Search", verbose);
   // Generate sketches
   if (sketch_cache_.empty()) {
@@ -1470,8 +1503,13 @@ Array<State> SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states,
   Array<Array<State>> neighbour_table =
       GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info);
   // PrintTitle("Node Move", verbose);
-
-  return NodeMove(neighbour_table, next_states, pz_factors);
+  Array<MeasureInput> total_inputs;
+  Array<MeasureResult> total_results;
+  NodeMove(neighbour_table, next_states, pz_factors, &total_inputs, &total_results, *model_age,
+           measurer);
+  program_cost_model->Update(total_inputs, total_results);
+  (*model_age) += 1;
+  // return NodeMove(neighbour_table, next_states, pz_factors);
 }
 
 Array<State> SketchPolicyNode::GenerateSketches() {

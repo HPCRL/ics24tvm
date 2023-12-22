@@ -176,11 +176,14 @@ bool isConfigKeyInTable(int key) ;
 
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states = nullptr, bool firsttime_random = false);
+  void SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer, Array<State>* next_states = nullptr, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
-  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors);
+  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
+    Array<MeasureInput>* total_inputs,
+     Array<MeasureResult>* total_results,
+     int model_age, ProgramMeasurer measurer);
   
   std::vector<ConfigKey> GetDirectNeighbors(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
