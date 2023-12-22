@@ -169,7 +169,7 @@ bool isConfigKeyInTable(int key) ;
    * \return The best several states generated in this search round.
    */
 
-  ConfigKey SketchPolicyNode::RandomMutate(
+  ConfigKey RandomMutate(
     std::unordered_map<std::string, std::vector<int>> current_config,
     std::unordered_map<std::string, std::vector<int>> pz_factors,
     std::vector<splitMeta*> v_splitMeta_info);

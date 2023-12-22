@@ -1202,148 +1202,122 @@ Array<State> SketchPolicyNode::NodeMove(
     vec_pop_scores.push_back(tmp);
   }
 
-  support::parallel_for(
-      0, neighbour_table.size(),
-      [this, &neighbour_table, &vec_pop_scores, &visited_mutex, &local_next_states,
-       &local_mins, &pz_factors](int index) {
-        const auto local_path = neighbour_table[index];
-        Array<State>& thread_local_next_states = local_next_states[index];
-        Array<State>& thread_local_min = local_mins[index];
+  for (int index = 0; index < neighbour_table.size(); index++) {
+    const auto local_path = neighbour_table[index];
+    Array<State>& thread_local_next_states = local_next_states[index];
+    Array<State>& thread_local_min = local_mins[index];
+    std::vector<float> pop_scores = vec_pop_scores[index];
 
-        std::vector<float> pop_scores = vec_pop_scores[index];
+    if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
+      // Invalid and no neighbors
+      continue;
+    }
 
-        if (pop_scores.size() - 1 == 0 ||
-            pop_scores[0] == -std::numeric_limits<float>::infinity()) {
-          // Invalid and no neighbors
-          return;
+    // TODO(Chendi): sorted by score
+    // Determine if the neighbor should be a local minimum
+    // path[0] : base state
+    // path[1:] : neighbour states
+    float base_score = pop_scores[0];
+    float best_score = base_score;
+    int best_neighbour_index = 0;
+    bool real_local_min_dd_hop = true;
+
+    for (int i = 1; i < pop_scores.size(); i++) {
+      std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
+      const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
+
+      // check if it is a real local min, all neighbor pscores should be not better than base
+      // pscore
+      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
+        real_local_min_dd_hop = false;
+      }
+      // find a better one, update best_score
+      if (pop_scores[i] > -1e10 && pop_scores[i] > best_score && visited.count(state_str) == 0) {
+        best_neighbour_index = i;
+        best_score = pop_scores[i];
+      }
+    }
+
+    // local min or not
+    if (best_neighbour_index == 0) {
+      // may have equal pscore neighbors
+      // in case we miss any near boundary states, equal best pscore states should also be
+      // explored
+      for (int i = 0; i < pop_scores.size(); i++) {
+        if (i == 0) continue;  // skip base state
+
+        std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
+        const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
+
+        // add unvisited equal pscore states to next_states
+        if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] &&
+            visited.count(state_str) == 0) {
+          visited.insert(state_str);  // add all next_states to visited, avoid circular
+          thread_local_next_states.push_back(local_path[i]);
         }
+      }
 
-        // TODO(Chendi): sorted by score
-        // Determine if the neighbor should be a local minimum
-        // path[0] : base state
-        // path[1:] : neighbour states
-        float base_score = pop_scores[0];
-        float best_score = base_score;
-        int best_neighbour_index = 0;
-        bool real_local_min_dd_hop = true;
+      if (real_local_min_dd_hop) {  // no absolute better pscore neighbor, real local min
+        std::map<int, ConfigKey> tmp_conf_table;
+        int idx_conf_table = 0;
+        std::vector<splitMeta*> v_splitMeta_info;
+        v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
+        const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
+        std::unordered_map<std::string, std::vector<int>> current_config =
+            GetStateFactor(search_task, local_path[0]);
+        for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
+          ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
+          // directly add to tmp_conf_table, will check if it is in visited
+          tmp_conf_table[idx_conf_table++] = next_config_key;
+        }
+        // std::cout <<"size of tmp_conf_table: " << tmp_conf_table.size() << std::endl;
+        // TODO: what if no 30;
 
-        for (int i = 1; i < pop_scores.size(); i++) {
-          std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
-          const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
+        Array<State> sampled_states =
+            SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
 
-          // check if it is a real local min, all neighbor pscores should be not better than base
-          // pscore
-          if (pop_scores[i] > -1e10 && pop_scores[i] > best_score) {
-            real_local_min_dd_hop = false;
-          }
+        std::vector<float> pop_scores_nhop;
+        pop_scores_nhop.reserve(sampled_states.size());
+
+        program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
+
+        // check n hop stuck
+        bool real_local_min = true;
+        for (int i = 0; i < pop_scores_nhop.size(); i++) {
+          std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, sampled_states[i]);
+          const auto state_str = state_to_string(sampled_states[i], v_splitMeta_info, search_task);
           // find a better one, update best_score
-          if (pop_scores[i] > -1e10 && pop_scores[i] > best_score &&
+          if (pop_scores_nhop[i] > -1e10 && pop_scores_nhop[i] > best_score &&
               visited.count(state_str) == 0) {
+            real_local_min = false;
             best_neighbour_index = i;
-            best_score = pop_scores[i];
+            best_score = pop_scores_nhop[i];
           }
         }
 
-
-        // local min or not
-        if (best_neighbour_index == 0) {
-          // may have equal pscore neighbors
-          // in case we miss any near boundary states, equal best pscore states should also be
-          // explored
-          for (int i = 0; i < pop_scores.size(); i++) {
-            if (i == 0) continue;  // skip base state
-
-            std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, local_path[i]);
-            const auto state_str = state_to_string(local_path[i], v_splitMeta_info, search_task);
-
-            // add unvisited equal pscore states to next_states
-            if (pop_scores[i] > -1e10 && pop_scores[i] == pop_scores[0] &&
-                visited.count(state_str) == 0) {
-              std::lock_guard<std::mutex> lock_visited(visited_mutex);
-              {
-                visited.insert(state_str);  // add all next_states to visited, avoid circular
-              }
-              thread_local_next_states.push_back(local_path[i]);
-            }
-          }
-
-
-          if (real_local_min_dd_hop) {  // no absolute better pscore neighbor, real local min
-            // thread_local_min.push_back(local_path[0]);  // send out local_min to measure
-            std::map<int, ConfigKey> tmp_conf_table;
-            int idx_conf_table = 0;
-            std::vector<splitMeta*> v_splitMeta_info;
-            v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
-            const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
-            std::unordered_map<std::string, std::vector<int>> current_config =
-                GetStateFactor(search_task, local_path[0]);
-            for (int j = 0; j < 30; j++) {  //mutate 30 more than 2 hops
-              ConfigKey next_config_key =
-                  RandomMutate(current_config, pz_factors, v_splitMeta_info);
-              // directly add to tmp_conf_table, will check if it is in visited
-              tmp_conf_table[idx_conf_table++] = next_config_key;
-            }
-            // TODO: what if no 30;
-
-
-             Array<State> sampled_states =
-                SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
-
-            std::vector<float> pop_scores_nhop;
-            pop_scores_nhop.reserve(sampled_states.size());
-
-            program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
-            
-            //check n hop stuck
-            bool real_local_min = true;
-            for (int i = 0; i < pop_scores_nhop.size(); i++) {
-              std::vector<splitMeta*> v_splitMeta_info = GenerateSplitMeta(this, sampled_states[i]);
-              const auto state_str = state_to_string(sampled_states[i], v_splitMeta_info, search_task);
-              // find a better one, update best_score
-              if (pop_scores_nhop[i] > -1e10 && pop_scores_nhop[i] > best_score &&
-                  visited.count(state_str) == 0) {
-                real_local_min = false;
-                best_neighbour_index = i;
-                best_score = pop_scores_nhop[i];
-              }
-            }
-
-
-            // after test n hop
-            if (real_local_min){
-              local_min.push_back(local_path[0]);
-            }
-            else{
-              // General case, better neighbour to move
-              std::vector<splitMeta*> v_splitMeta_info =
-                  GenerateSplitMeta(this, sampled_states[best_neighbour_index]);
-              const auto state_str =
-                  state_to_string(sampled_states[best_neighbour_index], v_splitMeta_info, search_task);
-              std::lock_guard<std::mutex> lock_visited(visited_mutex);
-              {
-                // if best_neighbour_index != 0, it has never been visited, no need to check if it's in
-                // visited, direct insert
-                visited.insert(state_str);  // add all next_states to visited, avoid circular
-              }
-              thread_local_next_states.push_back(sampled_states[best_neighbour_index]);
-            }
-
-          }
+        // after test n hop
+        if (real_local_min) {
+          thread_local_min.push_back(local_path[0]);
         } else {
           // General case, better neighbour to move
           std::vector<splitMeta*> v_splitMeta_info =
-              GenerateSplitMeta(this, local_path[best_neighbour_index]);
+              GenerateSplitMeta(this, sampled_states[best_neighbour_index]);
           const auto state_str =
-              state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
-          std::lock_guard<std::mutex> lock_visited(visited_mutex);
-          {
-            // if best_neighbour_index != 0, it has never been visited, no need to check if it's in
-            // visited, direct insert
-            visited.insert(state_str);  // add all next_states to visited, avoid circular
-          }
-          thread_local_next_states.push_back(local_path[best_neighbour_index]);
+              state_to_string(sampled_states[best_neighbour_index], v_splitMeta_info, search_task);
+          visited.insert(state_str);  // add all next_states to visited, avoid circular
+          thread_local_next_states.push_back(sampled_states[best_neighbour_index]);
         }
-      });
+      }
+    } else {
+      // General case, better neighbour to move
+      std::vector<splitMeta*> v_splitMeta_info =
+          GenerateSplitMeta(this, local_path[best_neighbour_index]);
+      const auto state_str =
+          state_to_string(local_path[best_neighbour_index], v_splitMeta_info, search_task);
+      visited.insert(state_str);  // add all next_states to visited, avoid circular
+      thread_local_next_states.push_back(local_path[best_neighbour_index]);
+    }
+  }
 
   for (auto& thread_states : local_next_states) {
     for (auto& state : thread_states) {
@@ -1356,8 +1330,7 @@ Array<State> SketchPolicyNode::NodeMove(
       local_min.push_back(min_state);
     }
   }
-
-  // return local min
+  
   return local_min;
 }
 
