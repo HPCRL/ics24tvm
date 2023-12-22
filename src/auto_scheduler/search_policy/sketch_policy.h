@@ -168,13 +168,19 @@ bool isConfigKeyInTable(int key) ;
    * \param random_states The picked random states, used as one of the output of this function.
    * \return The best several states generated in this search round.
    */
+
+  ConfigKey SketchPolicyNode::RandomMutate(
+    std::unordered_map<std::string, std::vector<int>> current_config,
+    std::unordered_map<std::string, std::vector<int>> pz_factors,
+    std::vector<splitMeta*> v_splitMeta_info);
+
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
   Array<State> SearchOneRoundPruePredict(int num_random_states, Array<State>* next_states = nullptr, bool firsttime_random = false);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
-  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states);
+  Array<State> NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors);
   
   std::vector<ConfigKey> GetDirectNeighbors(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
