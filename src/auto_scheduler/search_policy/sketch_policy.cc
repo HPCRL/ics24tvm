@@ -266,18 +266,20 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         PrintTimeElapsed(t_begin, "training", verbose);
       }
     }
-
+    
     while (ct < n_trials) {
       // create new predict based search
-      // local_min_best_states =
 
       SearchOneRoundPruePredict(init_num, measurer, &next_states, firsttime_random, &model_age);
-      // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
-      // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
-      if (next_states.empty()) {
+      std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
+      std::cout << "Num of next_states: #" << next_states.size() << std::endl;
+      std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
+                << std::endl;
+      if (next_states.empty() && !measured_states_throughputs_.empty()) {
         // NO more neighbour to explore, resample.
+        break;
+      } else if (next_states.empty()) {
         firsttime_random = true;
-        ct++;
       } else {
         firsttime_random = false;
       }
@@ -1164,6 +1166,9 @@ void SketchPolicyNode::NodeMove(
     int max_idx = 0;
     int window_start = 0;
     int topn = 3;
+    MeasureResult best_result;// base 
+    bool best_result_valid = false;
+
     while (max_idx == 0 && window_start + topn <= local_path.size() - 1) {
       Array<State> good_from_predict;
       std::vector<float> window_score;
@@ -1179,10 +1184,26 @@ void SketchPolicyNode::NodeMove(
       Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
       Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                         inputs, window_score, model_age);
+      if (!best_result_valid || FloatArrayMean(results[0]->costs) > FloatArrayMean(best_result->costs)) {
+        // update best result
+        best_result = results[0];
+        best_result_valid = true;
+      }
+
+      for (const auto& res : results) {
+        measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+      }
 
       for (auto in : inputs) total_inputs->push_back(in);
 
       for (auto res : results) total_results->push_back(res);
+
+      Array<MeasureResult> tmp_results;
+      tmp_results.push_back(best_result);
+      for (int i = 1; i < results.size(); i++){
+        tmp_results.push_back(results[i]);
+      }
+      results = tmp_results;
 
       // get all the gflops for each path
       std::vector<float> gflops_per_path;
@@ -1213,8 +1234,11 @@ void SketchPolicyNode::NodeMove(
         }
       }
 
-      if (max_idx != 0) {
+      std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
+      const auto state_str = state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
+      if (max_idx != 0 && visited.count(state_str) == 0) {
         // find a fast neigbour, leave;
+        visited.insert(state_str);
         next_states->push_back(good_from_predict[max_idx]);
         return;
       }
@@ -1260,8 +1284,24 @@ void SketchPolicyNode::NodeMove(
         Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                           inputs, window_score, model_age);
 
+        if (!best_result_valid || FloatArrayMean(results[0]->costs) > FloatArrayMean(best_result->costs)) {
+          // update best result
+          best_result = results[0];
+          best_result_valid = true;
+        }
+
+        for (const auto& res : results) {
+          measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+        }
         for (auto in : inputs) total_inputs->push_back(in);
         for (auto res : results) total_results->push_back(res);
+
+        Array<MeasureResult> tmp_results;
+        tmp_results.push_back(best_result);
+        for (int i = 1; i < results.size(); i++){
+          tmp_results.push_back(results[i]);
+        }
+        results = tmp_results;
 
         // get all the gflops for each path
         std::vector<float> gflops_per_path;
@@ -1292,8 +1332,11 @@ void SketchPolicyNode::NodeMove(
           }
         }
 
-        if (n_hop_max_idx != 0) {
+        std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[n_hop_max_idx]);
+        const auto state_str = state_to_string(good_from_predict[n_hop_max_idx], tmp_meta_info, search_task);
+        if (n_hop_max_idx != 0 && visited.count(state_str) == 0) {
           // find a fast neigbour, leave;
+          visited.insert(state_str);
           next_states->push_back(good_from_predict[n_hop_max_idx]);
           return;
         }
@@ -1434,11 +1477,11 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
     }
   }
 
-  // std::cout << "Base nodes #" << init_population.size() << std::endl;
-  // PrintTitle("Generate Neighbours", verbose);
+  std::cout << "Base nodes #" << init_population.size() << std::endl;
+  PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table =
       GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info);
-  // PrintTitle("Node Move", verbose);
+  PrintTitle("Node Move", verbose);
   Array<MeasureInput> total_inputs;
   Array<MeasureResult> total_results;
   NodeMove(neighbour_table, next_states, pz_factors, &total_inputs, &total_results, *model_age,
@@ -2301,7 +2344,7 @@ Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
     v_splitMeta_info = GenerateSplitMeta(this, state);
     std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
     if (!measured_states_set_.count(state_str)) {
-      measured_states_set_.insert(std::move(state_str));
+      // measured_states_set_.insert(std::move(state_str));
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
