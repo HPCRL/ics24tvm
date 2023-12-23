@@ -1184,7 +1184,7 @@ void SketchPolicyNode::NodeMove(
       Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
       Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                         inputs, window_score, model_age);
-      if (!best_result_valid || FloatArrayMean(results[0]->costs) > FloatArrayMean(best_result->costs)) {
+      if (!best_result_valid || FloatArrayMean(results[0]->costs) < FloatArrayMean(best_result->costs)) {
         // update best result
         best_result = results[0];
         best_result_valid = true;
@@ -1284,7 +1284,7 @@ void SketchPolicyNode::NodeMove(
         Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                           inputs, window_score, model_age);
 
-        if (!best_result_valid || FloatArrayMean(results[0]->costs) > FloatArrayMean(best_result->costs)) {
+        if (!best_result_valid || FloatArrayMean(results[0]->costs) < FloatArrayMean(best_result->costs)) {
           // update best result
           best_result = results[0];
           best_result_valid = true;
