@@ -1267,7 +1267,6 @@ void SketchPolicyNode::NodeMove(
 
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
-      int topn = 3;
       while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
