@@ -1161,21 +1161,33 @@ void SketchPolicyNode::NodeMove(
 
     float base_score = pop_scores[0];
     std::vector<float> neighbour_scores(pop_scores.begin() + 1, pop_scores.end());
+    Array<State> loal_path_neighbors(local_path.begin() + 1, local_path.end());
     std::vector<int> indices = Argsort(neighbour_scores);
 
     int max_idx = 0;
     int window_start = 0;
-    int topn = 3;
+    int topn_max = 3;
     MeasureResult best_result;// base 
     bool best_result_valid = false;
+    int topn = std::min(topn_max, static_cast<int>(loal_path_neighbors.size()));
+    std::cout << "topn = " << topn << std::endl;
 
-    while (max_idx == 0 && window_start + topn <= local_path.size() - 1) {
+    // missing the last batch if topn+window_start > loal_path_neighbors.size()
+    // while (max_idx == 0 && window_start + topn <= local_path.size() - 1) {
+    while (max_idx == 0 && window_start + topn <= loal_path_neighbors.size()) {
+      std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
+      std::cout << "window_start = " << window_start << std::endl;
+      std::cout << "topn = " << topn << std::endl;
+      std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
+
       Array<State> good_from_predict;
       std::vector<float> window_score;
       good_from_predict.push_back(local_path[0]);
       window_score.push_back(pop_scores[0]);
+      // local_path contains base state local_path[0]
+      // but neighbour_scores does not contain base state
       for (int i = 0; i < topn; i++) {
-        good_from_predict.push_back(local_path[indices[i+window_start]]);
+        good_from_predict.push_back(loal_path_neighbors[indices[i+window_start]]);
         window_score.push_back(neighbour_scores[indices[i+window_start]]);
       }
       window_start += topn;
@@ -1225,14 +1237,24 @@ void SketchPolicyNode::NodeMove(
         continue;
       }
 
+      std::cout << "size of good_from_predict " << good_from_predict.size() << std::endl;
+      std::cout << "size of gflops_per_path " << gflops_per_path.size() << std::endl;
+      if (good_from_predict.size() != gflops_per_path.size()) {
+        std::cout << "error: good_from_predict.size() != gflops_per_path.size()" << std::endl;
+        continue;
+      }
       // find the best gflops in path
       float max_flops = gflops_per_path[0];
       for (int i = 1; i < gflops_per_path.size(); i++) {
-        if (gflops_per_path[i] > max_flops) {
+        std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[i]);
+        const auto state_str = state_to_string(good_from_predict[i], tmp_meta_info, search_task);
+        if (gflops_per_path[i] > max_flops && visited.count(state_str) == 0) {
           max_flops = gflops_per_path[i];
           max_idx = i;
         }
       }
+
+      std::cout << "moving to idx " << max_idx << std::endl;
 
       std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
       const auto state_str = state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
@@ -1242,105 +1264,119 @@ void SketchPolicyNode::NodeMove(
         next_states->push_back(good_from_predict[max_idx]);
         return;
       }
+      if (topn + window_start > loal_path_neighbors.size()) {
+        topn = loal_path_neighbors.size() - window_start;
+      } else {
+        topn = topn_max;
+      }
     } // end regular Direct+Diag
 
-    if (max_idx == 0) {  // random n hop
-      std::map<int, ConfigKey> tmp_conf_table;
-      int idx_conf_table = 0;
-      std::vector<splitMeta*> v_splitMeta_info;
-      v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
-      const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
-      std::unordered_map<std::string, std::vector<int>> current_config =
-          GetStateFactor(search_task, local_path[0]);
-      for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
-        ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
-        // directly add to tmp_conf_table, will check if it is in visited
-        tmp_conf_table[idx_conf_table++] = next_config_key;
-      }
+    // if (max_idx == 0) {  // random n hop
+    //   std::map<int, ConfigKey> tmp_conf_table;
+    //   int idx_conf_table = 0;
+    //   std::vector<splitMeta*> v_splitMeta_info;
+    //   v_splitMeta_info = GenerateSplitMeta(this, local_path[0]);
+    //   const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
+    //   std::unordered_map<std::string, std::vector<int>> current_config =
+    //       GetStateFactor(search_task, local_path[0]);
+    //   for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
+    //     ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
+    //     // directly add to tmp_conf_table, will check if it is in visited
+    //     tmp_conf_table[idx_conf_table++] = next_config_key;
+    //   }
 
-      Array<State> sampled_states =
-          SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+    //   Array<State> sampled_states =
+    //       SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
 
-      std::vector<float> pop_scores_nhop;
-      pop_scores_nhop.reserve(sampled_states.size());
-      program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
+    //   std::vector<float> pop_scores_nhop;
+    //   pop_scores_nhop.reserve(sampled_states.size());
+    //   program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
 
-      int n_hop_max_idx = 0;
-      int n_hop_window_start = 0;
-      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
-        Array<State> good_from_predict;
-        std::vector<float> window_score;
-        good_from_predict.push_back(local_path[0]);
-        window_score.push_back(pop_scores[0]);
-        for (int i = 0; i < topn; i++) {
-          good_from_predict.push_back(local_path[indices[i+n_hop_window_start]]);
-          window_score.push_back(neighbour_scores[indices[i+n_hop_window_start]]);
-        }
-        n_hop_window_start += topn;
+    //   int n_hop_max_idx = 0;
+    //   int n_hop_window_start = 0;
+    //   while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
+    //     Array<State> good_from_predict;
+    //     std::vector<float> window_score;
+    //     good_from_predict.push_back(local_path[0]);
+    //     window_score.push_back(pop_scores[0]);
+    //     for (int i = 0; i < topn; i++) {
+    //       good_from_predict.push_back(loal_path_neighbors[indices[i+n_hop_window_start]]);
+    //       window_score.push_back(neighbour_scores[indices[i+n_hop_window_start]]);
+    //     }
+    //     n_hop_window_start += topn;
 
-        good_from_predict = search_task->compute_dag.InferBound(good_from_predict);
-        Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
-        Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
-                                                          inputs, window_score, model_age);
+    //     good_from_predict = search_task->compute_dag.InferBound(good_from_predict);
+    //     Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
+    //     Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
+    //                                                       inputs, window_score, model_age);
 
-        if (!best_result_valid || FloatArrayMean(results[0]->costs) < FloatArrayMean(best_result->costs)) {
-          // update best result
-          best_result = results[0];
-          best_result_valid = true;
-        }
+    //     if (!best_result_valid || FloatArrayMean(results[0]->costs) < FloatArrayMean(best_result->costs)) {
+    //       // update best result
+    //       best_result = results[0];
+    //       best_result_valid = true;
+    //     }
 
-        for (const auto& res : results) {
-          measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
-        }
-        for (auto in : inputs) total_inputs->push_back(in);
-        for (auto res : results) total_results->push_back(res);
+    //     for (const auto& res : results) {
+    //       measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+    //     }
+    //     for (auto in : inputs) total_inputs->push_back(in);
+    //     for (auto res : results) total_results->push_back(res);
 
-        Array<MeasureResult> tmp_results;
-        tmp_results.push_back(best_result);
-        for (int i = 1; i < results.size(); i++){
-          tmp_results.push_back(results[i]);
-        }
-        results = tmp_results;
+    //     Array<MeasureResult> tmp_results;
+    //     tmp_results.push_back(best_result);
+    //     for (int i = 1; i < results.size(); i++){
+    //       tmp_results.push_back(results[i]);
+    //     }
+    //     results = tmp_results;
 
-        // get all the gflops for each path
-        std::vector<float> gflops_per_path;
-        std::cout << "gflops: ";
-        int iter = 0;
-        bool has_valid = false;
-        for (auto res : results) {
-          float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
-          float gflops = flops / 1e9;
-          if (gflops - 0.0 > 1e-5) {
-            has_valid = true;
-          }
-          gflops_per_path.push_back(gflops);
-          std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
-        }
-        std::cout << std::endl;
-        if (!has_valid) {
-          std::cout << "no valid gflops, re-sample" << std::endl;
-          continue;
-        }
+    //     // get all the gflops for each path
+    //     std::vector<float> gflops_per_path;
+    //     std::cout << "gflops: ";
+    //     int iter = 0;
+    //     bool has_valid = false;
+    //     for (auto res : results) {
+    //       float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
+    //       float gflops = flops / 1e9;
+    //       if (gflops - 0.0 > 1e-5) {
+    //         has_valid = true;
+    //       }
+    //       gflops_per_path.push_back(gflops);
+    //       std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
+    //     }
+    //     std::cout << std::endl;
+    //     if (!has_valid) {
+    //       std::cout << "no valid gflops, re-sample" << std::endl;
+    //       continue;
+    //     }
 
-        // find the best gflops in path
-        float max_flops = gflops_per_path[0];
-        for (int i = 1; i < gflops_per_path.size(); i++) {
-          if (gflops_per_path[i] > max_flops) {
-            max_flops = gflops_per_path[i];
-            n_hop_max_idx = i;
-          }
-        }
+    //     std::cout << "size of good_from_predict " << good_from_predict.size() << std::endl;
+    //     std::cout << "size of gflops_per_path " << gflops_per_path.size() << std::endl;
+    //     if (good_from_predict.size() != gflops_per_path.size()) {
+    //       std::cout << "error: good_from_predict.size() != gflops_per_path.size()" << std::endl;
+    //       continue;
+    //     }
+    //     // find the best gflops in path
+    //     float max_flops = gflops_per_path[0];
+    //     for (int i = 1; i < gflops_per_path.size(); i++) {
+    //       std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[i]);
+    //       const auto state_str = state_to_string(good_from_predict[i], tmp_meta_info, search_task);
+    //       if (gflops_per_path[i] > max_flops && visited.count(state_str) == 0) {
+    //         max_flops = gflops_per_path[i];
+    //         n_hop_max_idx = i;
+    //       }
+    //     }
+    //     std::cout << "moving to idx " << n_hop_max_idx << std::endl;
 
-        std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[n_hop_max_idx]);
-        const auto state_str = state_to_string(good_from_predict[n_hop_max_idx], tmp_meta_info, search_task);
-        if (n_hop_max_idx != 0 && visited.count(state_str) == 0) {
-          // find a fast neigbour, leave;
-          visited.insert(state_str);
-          next_states->push_back(good_from_predict[n_hop_max_idx]);
-          return;
-        }
-      } //end while loop of nhop
-    } //end nhop test
+    //     std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[n_hop_max_idx]);
+    //     const auto state_str = state_to_string(good_from_predict[n_hop_max_idx], tmp_meta_info, search_task);
+    //     if (n_hop_max_idx != 0 && visited.count(state_str) == 0) {
+    //       // find a fast neigbour, leave;
+    //       visited.insert(state_str);
+    //       next_states->push_back(good_from_predict[n_hop_max_idx]);
+    //       return;
+    //     }
+    //   } //end while loop of nhop
+    // } //end nhop test
 
   }//fake for loop for neighbour table
 }
