@@ -1239,12 +1239,6 @@ void SketchPolicyNode::NodeMove(
         continue;
       }
 
-      std::cout << "size of good_from_predict " << good_from_predict.size() << std::endl;
-      std::cout << "size of gflops_per_path " << gflops_per_path.size() << std::endl;
-      if (good_from_predict.size() != gflops_per_path.size()) {
-        std::cout << "error: good_from_predict.size() != gflops_per_path.size()" << std::endl;
-        continue;
-      }
       // find the best gflops in path
       float max_flops = gflops_per_path[0];
       for (int i = 1; i < gflops_per_path.size(); i++) {
@@ -1282,31 +1276,53 @@ void SketchPolicyNode::NodeMove(
       const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
-      for (int j = 0; j < 30; j++) {  // mutate 30 more than 2 hops
+      int sampled_topK = 30;
+      for (int j = 0; j < sampled_topK * 2; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
         tmp_conf_table[idx_conf_table++] = next_config_key;
       }
 
+      // Array<State> tmp_states =
+      //     SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+
+      // std::vector<float> pop_scores_nhop;
+      // pop_scores_nhop.reserve(tmp_states.size());
+      // program_cost_model->Predict(search_task, tmp_states, &pop_scores_nhop);
+
+      // // sort by pop_scores_nhop and get the top30
+      // std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
+      // Array<State> sampled_states;
+      // sampled_states.reserve(std::min(30, static_cast<int>(tmp_states.size())));
+      // for (int j = 0; j < std::min(30, static_cast<int>(tmp_states.size())); j++) {
+      //   std::cout << "idx " << j << " pop_scores_nhop " << pop_scores_nhop[indices_nhop[j]] << ", ";
+      //   sampled_states.push_back(tmp_states[indices_nhop[j]]);
+      // }
+      // std::cout << std::endl;
+      // std::cout << "size of tmp_states " << tmp_states.size() << std::endl;
+      // std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+
       Array<State> sampled_states =
           SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
-
       std::vector<float> pop_scores_nhop;
       pop_scores_nhop.reserve(sampled_states.size());
       program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
 
+      // sort by pop_scores_nhop and get the top30
+      std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
+      std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
       topn = std::min(topn_max, static_cast<int>(sampled_states.size()));
-      std::cout << "[30 random nhop]topn = " << topn << std::endl;
-      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
+      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= std::min(sampled_topK, static_cast<int>(sampled_states.size())) - 1) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
         good_from_predict.push_back(local_path[0]);
         window_score.push_back(pop_scores[0]);
         for (int i = 0; i < topn; i++) {
-          good_from_predict.push_back(loal_path_neighbors[indices[i+n_hop_window_start]]);
-          window_score.push_back(neighbour_scores[indices[i+n_hop_window_start]]);
+          good_from_predict.push_back(sampled_states[indices_nhop[i+n_hop_window_start]]);
+          window_score.push_back(pop_scores_nhop[indices_nhop[i+n_hop_window_start]]);
         }
         n_hop_window_start += topn;
 
@@ -1354,12 +1370,6 @@ void SketchPolicyNode::NodeMove(
           continue;
         }
 
-        std::cout << "size of good_from_predict " << good_from_predict.size() << std::endl;
-        std::cout << "size of gflops_per_path " << gflops_per_path.size() << std::endl;
-        if (good_from_predict.size() != gflops_per_path.size()) {
-          std::cout << "error: good_from_predict.size() != gflops_per_path.size()" << std::endl;
-          continue;
-        }
         // find the best gflops in path
         float max_flops = gflops_per_path[0];
         for (int i = 1; i < gflops_per_path.size(); i++) {
@@ -1387,6 +1397,7 @@ void SketchPolicyNode::NodeMove(
         }
         std::cout << "topn = " << topn << std::endl;
         std::cout << "n_hop_window_start = " << n_hop_window_start << std::endl;
+        std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
       } //end while loop of nhop
     } //end nhop test
 
