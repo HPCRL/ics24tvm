@@ -280,6 +280,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         break;
       } else if (next_states.empty()) {
         firsttime_random = true;
+        // reset model age 
+        model_age = 1;
       } else {
         firsttime_random = false;
       }
@@ -1254,7 +1256,7 @@ void SketchPolicyNode::NodeMove(
         }
       }
 
-      std::cout << "moving to idx " << max_idx << std::endl;
+      std::cout << "moving to max_idx = " << max_idx << std::endl;
 
       std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
       const auto state_str = state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
@@ -1295,6 +1297,8 @@ void SketchPolicyNode::NodeMove(
 
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
+      topn = std::min(topn_max, static_cast<int>(sampled_states.size()));
+      std::cout << "[30 random nhop]topn = " << topn << std::endl;
       while (n_hop_max_idx == 0 && n_hop_window_start + topn <= sampled_states.size()) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
@@ -1332,7 +1336,7 @@ void SketchPolicyNode::NodeMove(
 
         // get all the gflops for each path
         std::vector<float> gflops_per_path;
-        std::cout << "gflops: ";
+        std::cout << "random nhop neighbors' gflops: ";
         int iter = 0;
         bool has_valid = false;
         for (auto res : results) {
@@ -1366,7 +1370,7 @@ void SketchPolicyNode::NodeMove(
             n_hop_max_idx = i;
           }
         }
-        std::cout << "moving to idx " << n_hop_max_idx << std::endl;
+        std::cout << "moving to n_hop_max_idx = " << n_hop_max_idx << std::endl;
 
         std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[n_hop_max_idx]);
         const auto state_str = state_to_string(good_from_predict[n_hop_max_idx], tmp_meta_info, search_task);
@@ -1376,11 +1380,13 @@ void SketchPolicyNode::NodeMove(
           next_states->push_back(good_from_predict[n_hop_max_idx]);
           return;
         }
-        if (topn + window_start > sampled_states.size()) {
-          topn = sampled_states.size() - window_start;
+        if (topn + n_hop_window_start > sampled_states.size()) {
+          topn = sampled_states.size() - n_hop_window_start;
         } else {
           topn = topn_max;
         }
+        std::cout << "topn = " << topn << std::endl;
+        std::cout << "n_hop_window_start = " << n_hop_window_start << std::endl;
       } //end while loop of nhop
     } //end nhop test
 
