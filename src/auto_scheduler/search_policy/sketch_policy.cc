@@ -1277,37 +1277,35 @@ void SketchPolicyNode::NodeMove(
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
       int sampled_topK = 30;
-      for (int j = 0; j < sampled_topK * 2; j++) {  // mutate more nhop neighbors
+      for (int j = 0; j < sampled_topK * 3; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
         tmp_conf_table[idx_conf_table++] = next_config_key;
       }
 
-      // Array<State> tmp_states =
+      // // sort and get sampled_topK neighbors
+      // Array<State> tmp_sampled_states =
       //     SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
-
+      // std::vector<float> tmp_pop_scores_nhop;
+      // tmp_pop_scores_nhop.reserve(tmp_sampled_states.size());
+      // program_cost_model->Predict(search_task, tmp_sampled_states, &tmp_pop_scores_nhop);
+      // std::vector<int> tmp_indices_nhop = Argsort(tmp_pop_scores_nhop);
       // std::vector<float> pop_scores_nhop;
-      // pop_scores_nhop.reserve(tmp_states.size());
-      // program_cost_model->Predict(search_task, tmp_states, &pop_scores_nhop);
-
-      // // sort by pop_scores_nhop and get the top30
-      // std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
       // Array<State> sampled_states;
-      // sampled_states.reserve(std::min(30, static_cast<int>(tmp_states.size())));
-      // for (int j = 0; j < std::min(30, static_cast<int>(tmp_states.size())); j++) {
-      //   std::cout << "idx " << j << " pop_scores_nhop " << pop_scores_nhop[indices_nhop[j]] << ", ";
-      //   sampled_states.push_back(tmp_states[indices_nhop[j]]);
+      // std::vector<int> indices_nhop;
+      // for (int j = 0; j < sampled_topK; j++) {
+      //   sampled_states.push_back(tmp_sampled_states[tmp_indices_nhop[j]]);
+      //   pop_scores_nhop.push_back(tmp_pop_scores_nhop[tmp_indices_nhop[j]]);
+      //   indices_nhop.push_back(j);
       // }
-      // std::cout << std::endl;
-      // std::cout << "size of tmp_states " << tmp_states.size() << std::endl;
-      // std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
 
-      Array<State> sampled_states =
+      Array<State> tmp_sampled_states =
           SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+          
+      Array<State> sampled_states(tmp_sampled_states.begin(), tmp_sampled_states.begin() + sampled_topK);
       std::vector<float> pop_scores_nhop;
       pop_scores_nhop.reserve(sampled_states.size());
       program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
-
       // sort by pop_scores_nhop and get the top30
       std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
       std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
