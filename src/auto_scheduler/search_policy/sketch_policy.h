@@ -176,11 +176,11 @@ bool isConfigKeyInTable(int key) ;
 
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  void SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer, Array<State>* next_states = nullptr, bool firsttime_random = false,  int* model_age = nullptr);
+  void SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
-  void NodeMove(Array<Array<State>> neighbour_table, Array<State>* next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
+  void NodeMove(Array<Array<State>> neighbour_table, std::vector<Array<State>*>  next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
     Array<MeasureInput>* total_inputs,
      Array<MeasureResult>* total_results,
      int model_age, ProgramMeasurer measurer);
@@ -214,6 +214,7 @@ bool isConfigKeyInTable(int key) ;
   std::map<int, ConfigKey> unique_conf_table_;
     int num_failed_local_search_;
     std::unordered_set<std::string> visited;
+    int count_sampled;
   std::unordered_set<std::string> cache_failed;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;

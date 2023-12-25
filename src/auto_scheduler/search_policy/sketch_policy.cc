@@ -229,7 +229,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
     int ct = 0;
     int empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
-    Array<State> best_states, next_states;
+    Array<State> best_states;
+    std::vector<Array<State>*> next_states;
     Array<MeasureInput> inputs;
     Array<MeasureResult> results;
     Array<State> local_min_best_states, track_path;
@@ -239,8 +240,9 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     bool firsttime_random = true;
     int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
-    int init_num = 1;
+    int init_num = 8;
     int model_age = 0;
+    count_sampled = 0;
 
     // generate a model based on random sampling and measure them
     if (ct == 0) {  // just run it at the first time
@@ -267,23 +269,22 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       }
     }
     
-    while (ct < n_trials) {
+    for (int i = 0; i < init_num; i++) {
+      next_states.push_back(new Array<State>());
+    }
+    while (measured_states_throughputs_.size() < 3000) {
+      // // init next_states
       // create new predict based search
-
-      SearchOneRoundPruePredict(init_num, measurer, &next_states, firsttime_random, &model_age);
+      SearchOneRoundPruePredict(init_num, measurer, next_states, firsttime_random, &model_age);
       std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
       std::cout << "Num of next_states: #" << next_states.size() << std::endl;
       std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
                 << std::endl;
-      if (next_states.empty() && !measured_states_throughputs_.empty()) {
-        // NO more neighbour to explore, resample.
+      std::cout << "Num of sampled: #" << count_sampled << std::endl;
+                
+      // TODO: if sample more than 32, break
+      if (count_sampled > 32) {
         break;
-      } else if (next_states.empty()) {
-        firsttime_random = true;
-        // reset model age 
-        model_age = 1;
-      } else {
-        firsttime_random = false;
       }
 
     }  // End of while loop
@@ -1123,18 +1124,59 @@ ConfigKey SketchPolicyNode::RandomMutate(
  *  @return: local mins and next states
  */
 void SketchPolicyNode::NodeMove(
-    Array<Array<State>> neighbour_table, Array<State>* next_states,
+    Array<Array<State>> neighbour_table, std::vector<Array<State>*> next_states,
     std::unordered_map<std::string, std::vector<int>> pz_factors, Array<MeasureInput>* total_inputs,
     Array<MeasureResult>* total_results, int model_age, ProgramMeasurer measurer) {
   // Clear next_states
-  next_states->clear();
+  // next_states->clear();
   total_inputs->clear();
   total_results->clear();
+  State newState = neighbour_table[0][0];
+  // move newstate to each array<state> in next_states
+  // std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
+  // for (int i = 0; i < next_states.size(); i++) { 
+  //   std::cout << "[NodeMove]i = " << i << std::endl;
+  //   std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
+  //   if (!next_states[i]->empty()) {
+  //     // array[0] = std::move(newState);
+  //     // array[0] is const , so pop it then push_back
+  //     next_states[i]->pop_back();
+  //     next_states[i]->push_back(std::move(newState));
+  //     std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
+  //   } else {
+  //     next_states[i]->push_back(std::move(newState));
+  //   }
+  // }
+  // std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
+  // return ;
 
+  // if (!next_states->empty()) {
+  //     // next_states 不为空，向每个 Array<State> 添加 newState
+  //     std::cout << "next_states is not empty" << std::endl;
+  //     for (int i = 0; i < next_states->size(); i++) {
+  //         (*next_states)[i].push_back(newState);
+  //     }
+  // } else {
+  //     std::cout << "next_states is empty" << std::endl;
+  //     // next_states 为空，先添加一个新的 Array<State>
+  //     Array<State> newArray;
+  //     newArray.push_back(newState);
+  //     next_states->push_back(newArray); // 添加 newArray 到 next_states
+  // for (auto& array : *next_states) {
+  //   if (!array.empty()) {
+  //     // array[0] = std::move(newState);
+  //     // array[0] is const , so pop it then push_back
+  //     array.pop_back();
+  //     array.push_back(std::move(newState));
+  //     std::cout << "[NodeMove]array size = " << array.size() << std::endl;
+  //   } else {
+  //     array.push_back(std::move(newState));
+  //   }
+  // }
+  // std::cout << "[NodeMove] size of next_states = " << next_states->size() << std::endl;
+  // return;
   Array<State> local_min;
   std::mutex visited_mutex;
-  std::vector<Array<State>> local_next_states(neighbour_table.size());
-  std::vector<Array<State>> local_mins(neighbour_table.size());
 
   // calculate the pop_scores for every path, ready for parallel
   std::vector<std::vector<float>> vec_pop_scores;
@@ -1150,14 +1192,16 @@ void SketchPolicyNode::NodeMove(
   }
 
   for (int index = 0; index < neighbour_table.size(); index++) {
+   std::cout << "index = " << index << std::endl;
     const auto local_path = neighbour_table[index];
-    Array<State>& thread_local_next_states = local_next_states[index];
-    Array<State>& thread_local_min = local_mins[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
     if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
       // Invalid and no neighbors
       // TODO: will resample init rethink logic
+      std::cout << "Invalid and no neighbors, re-sample" << std::endl;
+      // clear next_states[index]
+      next_states[index]->pop_back();
       continue;
     }
 
@@ -1166,17 +1210,34 @@ void SketchPolicyNode::NodeMove(
     Array<State> loal_path_neighbors(local_path.begin() + 1, local_path.end());
     std::vector<int> indices = Argsort(neighbour_scores);
 
+    float tolerant_score = 0.6 * base_score;
+    int topn_max;
+
+    if (tolerant_score > neighbour_scores[indices[0]]) { // tolerant_score > than any neighbor score
+      // pick topK neighbor score
+      topn_max = 3;
+      std::cout << "[2hop]neighbour_scores[indices[0]] = " << neighbour_scores[indices[0]] << std::endl;
+      std::cout << "[2hop]tolerant_score = " << tolerant_score << std::endl;
+      std::cout << "[2hop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
+    } else if (tolerant_score < neighbour_scores[indices[6]]) {
+      // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
+      topn_max = 6;
+      std::cout << "[2hop]neighbour_scores[indices[6]] = " << neighbour_scores[indices[6]] << std::endl;
+      std::cout << "[2hop]tolerant_score < neighbour_scores[indices[6]], topn_max = " << topn_max << std::endl;
+    } 
+    else { // regular: only measure topn_max
+      topn_max = 3;
+      std::cout << "[2hop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
+    }
+
     int max_idx = 0;
     int window_start = 0;
-    int topn_max = 3;
     MeasureResult best_result;// base 
     bool best_result_valid = false;
     int topn = std::min(topn_max, static_cast<int>(loal_path_neighbors.size()));
     std::cout << "topn = " << topn << std::endl;
-
-    // missing the last batch if topn+window_start > loal_path_neighbors.size()
-    // while (max_idx == 0 && window_start + topn <= local_path.size() - 1) {
-    while (max_idx == 0 && window_start + topn <= loal_path_neighbors.size()) {
+    
+    while (max_idx == 0 && window_start < topn_max) {
       std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
       std::cout << "window_start = " << window_start << std::endl;
       std::cout << "topn = " << topn << std::endl;
@@ -1255,10 +1316,27 @@ void SketchPolicyNode::NodeMove(
       std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
       const auto state_str = state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
       if (max_idx != 0 && visited.count(state_str) == 0) {
-        // find a fast neigbour, leave;
         visited.insert(state_str);
-        next_states->push_back(good_from_predict[max_idx]);
-        return;
+        std::cout << "find a fast neigbour, leave" << std::endl;
+        //push to next_states[index][0]
+        // need to get address of next_states[index][0]
+        // Array<State>& array = (*next_states)[index];
+        // array.push_back(good_from_predict[max_idx]);
+        // std::cout << "after: size of (*next_states)[index] = " << (*next_states)[index].size() << std::endl;
+
+        std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
+        if (!next_states[index]->empty()) {
+          // array[0] = std::move(newState);
+          // array[0] is const , so pop it then push_back
+          next_states[index]->pop_back();
+          next_states[index]->push_back(std::move(good_from_predict[max_idx]));
+          std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
+        } else {
+          next_states[index]->push_back(std::move(good_from_predict[max_idx]));
+        }
+        std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
+        
+        continue;
       }
       if (topn + window_start > loal_path_neighbors.size()) {
         topn = loal_path_neighbors.size() - window_start;
@@ -1267,8 +1345,8 @@ void SketchPolicyNode::NodeMove(
       }
     } // end regular Direct+Diag
 
-    std::cout << "base is a 2-hop local min, sampling 30 random n-hop.." << std::endl;
     if (max_idx == 0) {  // random n hop
+      std::cout << "base is a 2-hop local min, sampling 30 random n-hop.." << std::endl;
       std::map<int, ConfigKey> tmp_conf_table;
       int idx_conf_table = 0;
       std::vector<splitMeta*> v_splitMeta_info;
@@ -1276,7 +1354,7 @@ void SketchPolicyNode::NodeMove(
       const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
-      int sampled_topK = 30;
+      int sampled_topK = 10;
       for (int j = 0; j < sampled_topK * 3; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
@@ -1310,10 +1388,32 @@ void SketchPolicyNode::NodeMove(
       std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
       std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
 
+      float tolerant_score = 0.6 * base_score;
+      int topn_max;
+
+      if (tolerant_score > pop_scores_nhop[indices_nhop[0]]) { // tolerant_score > than any neighbor score
+        // pick topK neighbor score
+        topn_max = 3;
+        std::cout << "[nhop]pop_scores_nhop[indices_nhop[0]] = " << pop_scores_nhop[indices_nhop[0]] << std::endl;
+        std::cout << "[nhop]tolerant_score = " << tolerant_score << std::endl;
+        std::cout << "[nhop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
+      } else if (tolerant_score < pop_scores_nhop[indices_nhop[6]]) {
+        // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
+        topn_max = 6;
+        std::cout << "[nhop]pop_scores_nhop[indices_nhop[6]] = " << pop_scores_nhop[indices_nhop[6]] << std::endl;
+        std::cout << "[nhop]tolerant_score < pop_scores_nhop[indices_nhop[6]], topn_max = " << topn_max << std::endl;
+      } 
+      else { // regular: only measure topn_max
+        topn_max = 3;
+        std::cout << "[nhop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
+      }
+
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
       topn = std::min(topn_max, static_cast<int>(sampled_states.size()));
-      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= std::min(sampled_topK, static_cast<int>(sampled_states.size())) - 1) {
+      
+      std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
+      while (n_hop_max_idx == 0 && n_hop_window_start < std::min(sampled_topK, topn_max)) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
         good_from_predict.push_back(local_path[0]);
@@ -1385,8 +1485,28 @@ void SketchPolicyNode::NodeMove(
         if (n_hop_max_idx != 0 && visited.count(state_str) == 0) {
           // find a fast neigbour, leave;
           visited.insert(state_str);
-          next_states->push_back(good_from_predict[n_hop_max_idx]);
-          return;
+          // next_states->push_back(good_from_predict[n_hop_max_idx]);
+          // return;
+          // push to next_states
+          // std::cout << "push to next_states" << std::endl;
+          // local_next_states->push_back(good_from_predict[n_hop_max_idx]); 
+
+          std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
+          if (!next_states[index]->empty()) {
+            // array[0] = std::move(newState);
+            // array[0] is const , so pop it then push_back
+            next_states[index]->pop_back();
+            next_states[index]->push_back(std::move(good_from_predict[n_hop_max_idx]));
+            std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
+          } else {
+            next_states[index]->push_back(std::move(good_from_predict[n_hop_max_idx]));
+          }
+          std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
+          
+          continue;
+        } else {
+          // clear next_states[index] to re-sample
+          next_states[index]->pop_back();
         }
         if (topn + n_hop_window_start > sampled_states.size()) {
           topn = sampled_states.size() - n_hop_window_start;
@@ -1487,7 +1607,7 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
 }
 
 void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer,
-                                                 Array<State>* next_states, bool firsttime_random,
+                                                 std::vector<Array<State>*> next_states, bool firsttime_random,
                                                  int* model_age) {
   // PrintTitle("Search", verbose);
   // Generate sketches
@@ -1505,32 +1625,60 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
       this, &state,
       v_splitMeta_info);  // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
 
-  // PrintTitle("Generate Base States", verbose);
+  // // PrintTitle("Generate Base States", verbose);
+  // // base states in the init population
+  // Array<State> init_population;
+  // if (firsttime_random) {
+  //   // Sample the init population
+  //   init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
+
+  //   // push num_random_states random states into init_population as start point
+  //   Array<State> base_population;
+  //   for (auto state : init_population) {
+  //     std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, state);
+  //     const auto state_str = state_to_string(state, tmp_meta_info, search_task);
+  //     if (visited.count(state_str) == 0) {
+  //       visited.insert(state_str);
+  //       base_population.push_back(state);
+  //       if (--num_random_states == 0) {
+  //         break;
+  //       }
+  //     }
+  //   }
+  //   init_population = base_population;
+  // } else {
+  //   init_population.clear();
+  //   for (auto s : *next_states) {
+  //     init_population.push_back(s);
+  //   }
+  // }
+  PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
-  if (firsttime_random) {
-    // Sample the init population
-    init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
-
-    // push num_random_states random states into init_population as start point
-    Array<State> base_population;
-    for (auto state : init_population) {
-      std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, state);
-      const auto state_str = state_to_string(state, tmp_meta_info, search_task);
-      if (visited.count(state_str) == 0) {
-        visited.insert(state_str);
-        base_population.push_back(state);
-        if (--num_random_states == 0) {
-          break;
-        }
-      }
+  int idx = 0;
+  // std::cout << "size of next_states " << next_states->size() << std::endl;
+  // for (auto next : *next_states) {
+  //   if (next.empty()) {
+  //     std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
+  //     auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
+  //     // push back to next_states[i]
+  //     next.push_back(tmp_pop[0]);
+  //     count_sampled += 1;
+  //   }
+  //   init_population.push_back(next[0]);
+  // }
+  for (int i = 0; i < num_random_states; i++) {
+    auto next = next_states[i];
+    // reserve space for next_states[i]
+    next->reserve(1);
+    if (next->empty()) {
+      std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
+      auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
+      // push back to next_states[i]
+      next->push_back(tmp_pop[0]);
+      count_sampled += 1;
     }
-    init_population = base_population;
-  } else {
-    init_population.clear();
-    for (auto s : *next_states) {
-      init_population.push_back(s);
-    }
+    init_population.push_back((*next)[0]);
   }
 
   std::cout << "Base nodes #" << init_population.size() << std::endl;
@@ -1542,9 +1690,10 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
   Array<MeasureResult> total_results;
   NodeMove(neighbour_table, next_states, pz_factors, &total_inputs, &total_results, *model_age,
            measurer);
+  std::cout << "next_states size " << next_states.size() << std::endl;
+
   program_cost_model->Update(total_inputs, total_results);
   (*model_age) += 1;
-  // return NodeMove(neighbour_table, next_states, pz_factors);
 }
 
 Array<State> SketchPolicyNode::GenerateSketches() {
@@ -1763,7 +1912,7 @@ bool SketchPolicyNode::cuda_view(const State& state,
 
 Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches,
                                                     int num_required) {
-  PrintTitle("Sample CUDA View Population", verbose);
+  // PrintTitle("Sample CUDA View Population", verbose);
   // Use this population as the parallel degree to do sampling
   int population = num_required * 2;
   sample_init_min_pop_ = num_required;
