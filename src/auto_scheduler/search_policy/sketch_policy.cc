@@ -240,7 +240,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     bool firsttime_random = true;
     int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
-    int init_num = 8;
+    int init_num = 4;
     int model_age = 0;
     count_sampled = 0;
 
@@ -283,7 +283,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       std::cout << "Num of sampled: #" << count_sampled << std::endl;
                 
       // TODO: if sample more than 32, break
-      if (count_sampled > 32) {
+      if (count_sampled > 8+init_num) {
         break;
       }
 
@@ -1196,14 +1196,14 @@ void SketchPolicyNode::NodeMove(
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
-    if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
-      // Invalid and no neighbors
-      // TODO: will resample init rethink logic
-      std::cout << "Invalid and no neighbors, re-sample" << std::endl;
-      // clear next_states[index]
-      next_states[index]->pop_back();
-      continue;
-    }
+    // if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
+    //   // Invalid and no neighbors
+    //   // TODO: will resample init rethink logic
+    //   std::cout << "Invalid and no neighbors, re-sample" << std::endl;
+    //   // clear next_states[index]
+    //   next_states[index]->pop_back();
+    //   continue;
+    // }
 
     float base_score = pop_scores[0];
     std::vector<float> neighbour_scores(pop_scores.begin() + 1, pop_scores.end());
@@ -1212,21 +1212,22 @@ void SketchPolicyNode::NodeMove(
 
     float tolerant_score = 0.6 * base_score;
     int topn_max;
+    int window_size = 20;
 
     if (tolerant_score > neighbour_scores[indices[0]]) { // tolerant_score > than any neighbor score
       // pick topK neighbor score
-      topn_max = 3;
+      topn_max = window_size;
       std::cout << "[2hop]neighbour_scores[indices[0]] = " << neighbour_scores[indices[0]] << std::endl;
       std::cout << "[2hop]tolerant_score = " << tolerant_score << std::endl;
       std::cout << "[2hop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
     } else if (tolerant_score < neighbour_scores[indices[6]]) {
       // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
-      topn_max = 6;
+      topn_max = window_size*2;
       std::cout << "[2hop]neighbour_scores[indices[6]] = " << neighbour_scores[indices[6]] << std::endl;
       std::cout << "[2hop]tolerant_score < neighbour_scores[indices[6]], topn_max = " << topn_max << std::endl;
     } 
     else { // regular: only measure topn_max
-      topn_max = 3;
+      topn_max = window_size;
       std::cout << "[2hop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
     }
 
@@ -1354,7 +1355,7 @@ void SketchPolicyNode::NodeMove(
       const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
-      int sampled_topK = 10;
+      int sampled_topK = window_size;
       for (int j = 0; j < sampled_topK * 3; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
@@ -1393,18 +1394,18 @@ void SketchPolicyNode::NodeMove(
 
       if (tolerant_score > pop_scores_nhop[indices_nhop[0]]) { // tolerant_score > than any neighbor score
         // pick topK neighbor score
-        topn_max = 3;
+        topn_max = window_size;
         std::cout << "[nhop]pop_scores_nhop[indices_nhop[0]] = " << pop_scores_nhop[indices_nhop[0]] << std::endl;
         std::cout << "[nhop]tolerant_score = " << tolerant_score << std::endl;
         std::cout << "[nhop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
       } else if (tolerant_score < pop_scores_nhop[indices_nhop[6]]) {
         // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
-        topn_max = 6;
+        topn_max = window_size*2;
         std::cout << "[nhop]pop_scores_nhop[indices_nhop[6]] = " << pop_scores_nhop[indices_nhop[6]] << std::endl;
         std::cout << "[nhop]tolerant_score < pop_scores_nhop[indices_nhop[6]], topn_max = " << topn_max << std::endl;
       } 
       else { // regular: only measure topn_max
-        topn_max = 3;
+        topn_max = window_size;
         std::cout << "[nhop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
       }
 
