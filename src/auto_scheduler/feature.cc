@@ -1995,6 +1995,10 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   int num_thread_per_block = 1;
   // // std::cout << "end-----------------------------------" << std::endl;
   // std::cout << "end-----------------------------------" << std::endl;
+  int reg_ff, reg_xx, reg_yy;
+  int sm_rx, sm_ry, sm_rc;
+  int pz_rc, pz_rx, pz_ry, pz_ff, pz_xx, pz_yy;
+  int tb_xx, tb_yy, tb_ff;
 
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
@@ -2010,6 +2014,20 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       int tb = spm->tile_sizes[2];
       parallel_data_map[spm->origin_itr->name] = {reg, pz, tb};
 
+      if (spm->origin_itr->name == "ff"){
+        reg_ff = reg;
+        pz_ff = spm->problem_size;
+        tb_ff = spm->tile_sizes[2];
+      }
+      if (spm->origin_itr->name == "xx"){
+        reg_xx = reg;
+        pz_xx = spm->problem_size;
+        tb_xx = spm->tile_sizes[2];
+      }
+      if (spm->origin_itr->name == "yy"){
+        reg_yy = reg;
+        tb_yy = spm->tile_sizes[2];
+      }
       grid_size *= spm->tile_sizes[0];
       thread_block_size *= spm->tile_sizes[2];
 
@@ -2044,6 +2062,19 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         stencil_reduction_data_map[spm->origin_itr->name] = {sm_reduction, pz};
       }
 
+      if (spm->origin_itr->name == "rc"){
+        sm_rc = sm_reduction;
+        pz_rc = spm->problem_size;
+      }
+      if (spm->origin_itr->name == "rx"){
+        sm_rx = sm_reduction;
+        pz_rx = spm->problem_size;
+      }
+      if (spm->origin_itr->name == "ry"){
+        sm_ry = sm_reduction;
+        pz_ry = spm->problem_size;
+      }
+
 
       sm_name_val_map[spm->origin_itr->name] = spm->tile_sizes[1] * spm->tile_sizes[2];
       reg_name_val_map[spm->origin_itr->name] = 1;
@@ -2074,6 +2105,55 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   //     std::cout << "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
   //   }
   // }
+
+
+  if (pz_rc == 3){// rgb = 3
+    if (sm_rx != 3 || sm_ry != 3){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
+  else if (pz_rx == 1){ // KW/KH = 1
+    if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
+  else{
+    if (sm_rx != 3 || sm_ry != 3){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (sm_rc > 64){// no too large input SM
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
 
   // Get CHR and following CA node
   // target_iter_id from CA
