@@ -2107,53 +2107,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // }
 
 
-  if (pz_rc == 3){// rgb = 3
-    if (sm_rx != 3 || sm_ry != 3){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
-  else if (pz_rx == 1){ // KW/KH = 1
-    if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
-  else{
-    if (sm_rx != 3 || sm_ry != 3){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (sm_rc > 64){// no too large input SM
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
 
   // Get CHR and following CA node
   // target_iter_id from CA
@@ -2486,6 +2439,63 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
   //   return std::make_tuple(-1, -1, -1, -1);
   // }
+  if (pz_rx == 7){ // KW/KH = 7
+    
+    if (sm_rx != 7 || sm_ry != 7){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  } else if (pz_rc == 3){// rgb = 3
+    if (sm_rx != 3 || sm_ry != 3){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
+  else if (pz_rx == 1){ // KW/KH = 1
+    if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
+  else{
+    if (sm_rx != 3 || sm_ry != 3){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (sm_rc > 64){// no too large input SM
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if (reg_ff > 30 || reg_xx > 30) {
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+
+    if ( reg_yy != 1){
+      return std::make_tuple(-1, -1, -1, -1);
+    }
+  }
+
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
   }
