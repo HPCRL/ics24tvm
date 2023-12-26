@@ -240,7 +240,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     bool firsttime_random = true;
     int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
-    int init_num = 4;
+    int init_num = 2;
     int model_age = 0;
     count_sampled = 0;
 
@@ -283,7 +283,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       std::cout << "Num of sampled: #" << count_sampled << std::endl;
                 
       // TODO: if sample more than 32, break
-      if (count_sampled > 8+init_num) {
+      if (count_sampled > 2+init_num) {
         break;
       }
 
@@ -1212,7 +1212,8 @@ void SketchPolicyNode::NodeMove(
 
     float tolerant_score = 0.6 * base_score;
     int topn_max;
-    int window_size = 20;
+    int window_size = 15;
+    int sampled_topK = 30;
 
     if (tolerant_score > neighbour_scores[indices[0]]) { // tolerant_score > than any neighbor score
       // pick topK neighbor score
@@ -1238,7 +1239,7 @@ void SketchPolicyNode::NodeMove(
     int topn = std::min(topn_max, static_cast<int>(loal_path_neighbors.size()));
     std::cout << "topn = " << topn << std::endl;
     
-    while (max_idx == 0 && window_start < topn_max) {
+    while (max_idx == 0 && window_start < std::min(topn_max, static_cast<int>(loal_path_neighbors.size()))) {
       std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
       std::cout << "window_start = " << window_start << std::endl;
       std::cout << "topn = " << topn << std::endl;
@@ -1339,11 +1340,7 @@ void SketchPolicyNode::NodeMove(
         
         continue;
       }
-      if (topn + window_start > loal_path_neighbors.size()) {
-        topn = loal_path_neighbors.size() - window_start;
-      } else {
-        topn = topn_max;
-      }
+      topn = std::min(topn, static_cast<int>(loal_path_neighbors.size() - window_start));
     } // end regular Direct+Diag
 
     if (max_idx == 0) {  // random n hop
@@ -1355,7 +1352,6 @@ void SketchPolicyNode::NodeMove(
       const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
-      int sampled_topK = window_size;
       for (int j = 0; j < sampled_topK * 3; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
