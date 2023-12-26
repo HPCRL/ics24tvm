@@ -1192,7 +1192,7 @@ void SketchPolicyNode::NodeMove(
   }
 
   for (int index = 0; index < neighbour_table.size(); index++) {
-   std::cout << "index = " << index << std::endl;
+   std::cout << "[NodeMove]Node index = " << index << std::endl;
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
@@ -1206,40 +1206,22 @@ void SketchPolicyNode::NodeMove(
     // }
 
     float base_score = pop_scores[0];
+    float tolerant_score = 0.6 * base_score;
     std::vector<float> neighbour_scores(pop_scores.begin() + 1, pop_scores.end());
     Array<State> loal_path_neighbors(local_path.begin() + 1, local_path.end());
     std::vector<int> indices = Argsort(neighbour_scores);
 
-    float tolerant_score = 0.6 * base_score;
-    int topn_max;
-    int window_size = 15;
+    int window_size = 3;
     int sampled_topK = 30;
-
-    if (tolerant_score > neighbour_scores[indices[0]]) { // tolerant_score > than any neighbor score
-      // pick topK neighbor score
-      topn_max = window_size;
-      std::cout << "[2hop]neighbour_scores[indices[0]] = " << neighbour_scores[indices[0]] << std::endl;
-      std::cout << "[2hop]tolerant_score = " << tolerant_score << std::endl;
-      std::cout << "[2hop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
-    } else if (tolerant_score < neighbour_scores[indices[6]]) {
-      // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
-      topn_max = window_size*2;
-      std::cout << "[2hop]neighbour_scores[indices[6]] = " << neighbour_scores[indices[6]] << std::endl;
-      std::cout << "[2hop]tolerant_score < neighbour_scores[indices[6]], topn_max = " << topn_max << std::endl;
-    } 
-    else { // regular: only measure topn_max
-      topn_max = window_size;
-      std::cout << "[2hop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
-    }
 
     int max_idx = 0;
     int window_start = 0;
     MeasureResult best_result;// base 
     bool best_result_valid = false;
-    int topn = std::min(topn_max, static_cast<int>(loal_path_neighbors.size()));
+    int topn = std::min(window_size, static_cast<int>(loal_path_neighbors.size()));
     std::cout << "topn = " << topn << std::endl;
     
-    while (max_idx == 0 && window_start < std::min(topn_max, static_cast<int>(loal_path_neighbors.size()))) {
+    while (max_idx == 0 && window_start < static_cast<int>(loal_path_neighbors.size())) {
       std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
       std::cout << "window_start = " << window_start << std::endl;
       std::cout << "topn = " << topn << std::endl;
@@ -1385,32 +1367,14 @@ void SketchPolicyNode::NodeMove(
       std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
       std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
 
-      float tolerant_score = 0.6 * base_score;
-      int topn_max;
-
-      if (tolerant_score > pop_scores_nhop[indices_nhop[0]]) { // tolerant_score > than any neighbor score
-        // pick topK neighbor score
-        topn_max = window_size;
-        std::cout << "[nhop]pop_scores_nhop[indices_nhop[0]] = " << pop_scores_nhop[indices_nhop[0]] << std::endl;
-        std::cout << "[nhop]tolerant_score = " << tolerant_score << std::endl;
-        std::cout << "[nhop]tolerant_score > than any neighbor score, topn_max = " << topn_max << std::endl;
-      } else if (tolerant_score < pop_scores_nhop[indices_nhop[6]]) {
-        // too many points are better than my tolerant score, 2*topn_max neighbors measure, good -> move , not goot random sample
-        topn_max = window_size*2;
-        std::cout << "[nhop]pop_scores_nhop[indices_nhop[6]] = " << pop_scores_nhop[indices_nhop[6]] << std::endl;
-        std::cout << "[nhop]tolerant_score < pop_scores_nhop[indices_nhop[6]], topn_max = " << topn_max << std::endl;
-      } 
-      else { // regular: only measure topn_max
-        topn_max = window_size;
-        std::cout << "[nhop]regular: only measure topn_max, topn_max = " << topn_max << std::endl;
-      }
-
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
-      topn = std::min(topn_max, static_cast<int>(sampled_states.size()));
-      
+      topn = std::min(sampled_topK, static_cast<int>(sampled_states.size()));
+      std::cout << "randome jump topn = " << topn << std::endl;
       std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
-      while (n_hop_max_idx == 0 && n_hop_window_start < std::min(sampled_topK, topn_max)) {
+      std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+      std::cout << "size of sampled_topK " << sampled_topK << std::endl;
+      while (n_hop_max_idx == 0 && n_hop_window_start < std::min(sampled_topK, static_cast<int>(sampled_states.size()))) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
         good_from_predict.push_back(local_path[0]);
@@ -1505,14 +1469,7 @@ void SketchPolicyNode::NodeMove(
           // clear next_states[index] to re-sample
           next_states[index]->pop_back();
         }
-        if (topn + n_hop_window_start > sampled_states.size()) {
-          topn = sampled_states.size() - n_hop_window_start;
-        } else {
-          topn = topn_max;
-        }
-        std::cout << "topn = " << topn << std::endl;
-        std::cout << "n_hop_window_start = " << n_hop_window_start << std::endl;
-        std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
+        topn = std::min(topn, static_cast<int>(sampled_states.size() - n_hop_window_start));
       } //end while loop of nhop
     } //end nhop test
 
