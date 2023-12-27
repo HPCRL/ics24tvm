@@ -1221,11 +1221,16 @@ void SketchPolicyNode::NodeMove(
     int topn = std::min(window_size, static_cast<int>(loal_path_neighbors.size()));
     std::cout << "topn = " << topn << std::endl;
     
-    while (max_idx == 0 && window_start < static_cast<int>(loal_path_neighbors.size())) {
+    while (max_idx == 0 && window_start + topn <= static_cast<int>(loal_path_neighbors.size())) {
       std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
       std::cout << "window_start = " << window_start << std::endl;
       std::cout << "topn = " << topn << std::endl;
       std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
+
+      // tolerant_score > than any neighbor score idx from window_start to window_start + topn
+      if (tolerant_score > neighbour_scores[indices[window_start]]) {
+        break;
+      }
 
       Array<State> good_from_predict;
       std::vector<float> window_score;
@@ -1374,7 +1379,7 @@ void SketchPolicyNode::NodeMove(
       std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
       std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
       std::cout << "size of sampled_topK " << sampled_topK << std::endl;
-      while (n_hop_max_idx == 0 && n_hop_window_start < std::min(sampled_topK, static_cast<int>(sampled_states.size()))) {
+      while (n_hop_max_idx == 0 && n_hop_window_start + topn <= std::min(sampled_topK, static_cast<int>(sampled_states.size()))) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
         good_from_predict.push_back(local_path[0]);
@@ -1466,8 +1471,10 @@ void SketchPolicyNode::NodeMove(
           
           continue;
         } else {
-          // clear next_states[index] to re-sample
-          next_states[index]->pop_back();
+          if (!next_states[index]->empty()) {
+            // clear next_states[index] to re-sample
+            next_states[index]->pop_back();
+          }
         }
         topn = std::min(topn, static_cast<int>(sampled_states.size() - n_hop_window_start));
       } //end while loop of nhop
