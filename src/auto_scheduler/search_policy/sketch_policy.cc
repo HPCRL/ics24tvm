@@ -631,9 +631,12 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
       auto reg = current_config[dim_name][0];
       auto tb = current_config[dim_name][1];
 
+      //remap to our inclusive tile size
       // find the index of tb and reg in pz_factors
-      auto tb_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), tb);
+      tb = tb * reg;
       auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+      auto tb_index = std::find(pz_factors[dim_name+"_sm"].begin(), pz_factors[dim_name+"_sm"].end(), tb);
+      
 
       // up for tb
       if (tb_index != pz_factors[dim_name].end() - 1) {
@@ -641,11 +644,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto up_tb_index = tb_index + 1;
         // std::vector<int> tmp =pz_factors[dim_name];
         // auto up_tb = tmp.at(up_tb_index - pz_factors[dim_name].begin());
-        auto up_tb = pz_factors[dim_name].at(up_tb_index - pz_factors[dim_name].begin());
+        auto up_tb = pz_factors[dim_name+"_sm"].at(up_tb_index - pz_factors[dim_name+"_sm"].begin());
         // valid
-        if (up_tb * reg <= pz && up_tb <= max_innermost_split_factor) {
+        if (up_tb >= reg) {
           // std::cout << "up_tb: " << up_tb << std::endl;
-          tmp_config[dim_name][1] = up_tb;
+          tmp_config[dim_name][1] = up_tb/reg;
           ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
           neighbors_config_key.push_back(config_key);
         }
@@ -654,11 +657,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
       if (tb_index != pz_factors[dim_name].begin()) {
         tmp_config = current_config;
         auto down_tb_index = tb_index - 1;
-        auto down_tb = pz_factors[dim_name].at(down_tb_index - pz_factors[dim_name].begin());
+        auto down_tb = pz_factors[dim_name+"_sm"].at(down_tb_index - pz_factors[dim_name+"_sm"].begin());
         // valid
-        if (down_tb * reg <= pz && down_tb <= max_innermost_split_factor) {
+        if (down_tb >= reg ) {
           // std::cout << "down_tb: " << down_tb << std::endl;
-          tmp_config[dim_name][1] = down_tb;
+          tmp_config[dim_name][1] = down_tb/reg;
           ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
           neighbors_config_key.push_back(config_key);
         }
@@ -670,7 +673,7 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto up_reg_index = reg_index + 1;
         auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
         // valid
-        if (up_reg * tb <= pz && up_reg <= max_innermost_split_factor) {
+        if (up_reg <= tb) {
           // std::cout << "up_reg: " << up_reg << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = up_reg;
           ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
@@ -684,7 +687,7 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto down_reg_index = reg_index - 1;
         auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
         // valid
-        if (down_reg * tb <= pz && down_reg <= max_innermost_split_factor) {
+        if (down_reg <= tb ) {
           // std::cout << "down_reg: " << down_reg << std::endl;
           tmp_config[dim_name][0] = down_reg;
           ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
@@ -1567,6 +1570,18 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
   return res;
 }
 
+std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
+  std::unordered_set<int> sm_ts;
+  for (int i = 0; i < reg_tile_factors.size(); i++){
+    for (int j = i; j < reg_tile_factors.size(); j++){
+        sm_ts.insert(reg_tile_factors[i]*reg_tile_factors[j]);
+    }
+  }
+  std::vector<int> sm_factors(sm_ts.begin(), sm_ts.end());
+  return sm_factors;
+}
+
+
 void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer,
                                                  std::vector<Array<State>*> next_states, bool firsttime_random,
                                                  int* model_age) {
@@ -1586,33 +1601,16 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
       this, &state,
       v_splitMeta_info);  // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
 
-  // // PrintTitle("Generate Base States", verbose);
-  // // base states in the init population
-  // Array<State> init_population;
-  // if (firsttime_random) {
-  //   // Sample the init population
-  //   init_population = SampleCUDAPopulation(sketch_cache_, num_random_states);
+  //current pz use it as reg_tile_factors;
+  std::unordered_map<std::string, std::vector<int>> tmp_sm_factors;
+  for(auto p : pz_factors){
+    tmp_sm_factors[p.first+"_sm"] = computeSMTileSize(p.second);
+  } 
 
-  //   // push num_random_states random states into init_population as start point
-  //   Array<State> base_population;
-  //   for (auto state : init_population) {
-  //     std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, state);
-  //     const auto state_str = state_to_string(state, tmp_meta_info, search_task);
-  //     if (visited.count(state_str) == 0) {
-  //       visited.insert(state_str);
-  //       base_population.push_back(state);
-  //       if (--num_random_states == 0) {
-  //         break;
-  //       }
-  //     }
-  //   }
-  //   init_population = base_population;
-  // } else {
-  //   init_population.clear();
-  //   for (auto s : *next_states) {
-  //     init_population.push_back(s);
-  //   }
-  // }
+  // merge pz_factors and tmp_sm_factors
+  pz_factors.insert(tmp_sm_factors.begin(), tmp_sm_factors.end());
+
+
   PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
