@@ -276,11 +276,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       // // init next_states
       // create new predict based search
       SearchOneRoundPruePredict(init_num, measurer, next_states, firsttime_random, &model_age);
-      std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
-      std::cout << "Num of next_states: #" << next_states.size() << std::endl;
-      std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
-                << std::endl;
-      std::cout << "Num of sampled: #" << count_sampled << std::endl;
+      // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
+      // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
+      // std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
+      //           << std::endl;
+      // std::cout << "Num of sampled: #" << count_sampled << std::endl;
                 
       // TODO: if sample more than 32, break
       if (count_sampled > 2+init_num) {
@@ -612,19 +612,8 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
   //  int max_innermost_split_factor = GetIntParam(this->params,
   //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
   int max_innermost_split_factor = INT_MAX;
-
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
   for (auto sm : v_splitMeta_info) {
-    // std::cout << "current_config: \n" << std::endl;
-    for (auto c : tmp_config) {
-      std::string key = c.first;
-      std::vector<int> value = c.second;
-      // std::cout << "key: " << key << std::endl;
-      for (int i = 0; i < value.size(); i++) {
-        // std::cout << value[i] << " ";
-      }
-      // std::cout << std::endl;
-    }
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
       auto dim_name = sm->origin_itr->name;
       auto pz = sm->problem_size;
@@ -634,12 +623,17 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
       //remap to our inclusive tile size
       // find the index of tb and reg in pz_factors
       tb = tb * reg;
+
       auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
       auto tb_index = std::find(pz_factors[dim_name+"_sm"].begin(), pz_factors[dim_name+"_sm"].end(), tb);
-      
+
+      // if not found in pz_factors, then continue
+      if (reg_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
+        continue;
+      }
 
       // up for tb
-      if (tb_index != pz_factors[dim_name].end() - 1) {
+      if (tb_index != pz_factors[dim_name+"_sm"].end() - 1) {
         tmp_config = current_config;
         auto up_tb_index = tb_index + 1;
         // std::vector<int> tmp =pz_factors[dim_name];
@@ -649,12 +643,15 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         if (up_tb >= reg) {
           // std::cout << "up_tb: " << up_tb << std::endl;
           tmp_config[dim_name][1] = up_tb/reg;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-          neighbors_config_key.push_back(config_key);
+          // pz must can be divided by tb*reg
+          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
       // down for tb
-      if (tb_index != pz_factors[dim_name].begin()) {
+      if (tb_index != pz_factors[dim_name+"_sm"].begin()) {
         tmp_config = current_config;
         auto down_tb_index = tb_index - 1;
         auto down_tb = pz_factors[dim_name+"_sm"].at(down_tb_index - pz_factors[dim_name+"_sm"].begin());
@@ -662,8 +659,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         if (down_tb >= reg ) {
           // std::cout << "down_tb: " << down_tb << std::endl;
           tmp_config[dim_name][1] = down_tb/reg;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-          neighbors_config_key.push_back(config_key);
+          // pz must can be divided by tb*reg
+          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
 
@@ -676,8 +676,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         if (up_reg <= tb) {
           // std::cout << "up_reg: " << up_reg << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = up_reg;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-          neighbors_config_key.push_back(config_key);
+          // pz must can be divided by tb*reg
+          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
 
@@ -690,8 +693,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         if (down_reg <= tb) {
           // std::cout << "down_reg: " << down_reg << std::endl;
           tmp_config[dim_name][0] = down_reg;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-          neighbors_config_key.push_back(config_key);
+          // pz must can be divided by tb*reg
+          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
     } else {
@@ -709,12 +715,13 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
         // valid
         if (up_inner_inner <= pz && up_inner_inner <= max_innermost_split_factor) {
-          // std::cout << "up_inner_inner: " << up_inner_inner << "for dimname " << dim_name <<
-          // std::endl;
+          // std::cout << "up_inner_inner: " << up_inner_inner << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = up_inner_inner;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-
-          neighbors_config_key.push_back(config_key);
+          // pz must can be divided by tb*reg
+          if (pz % tmp_config[dim_name][0] == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
       // down
@@ -724,11 +731,12 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
         // valid
         if (down_inner_inner <= pz && down_inner_inner <= max_innermost_split_factor) {
-          // std::cout << "down_inner_inner: " << down_inner_inner << "for dimname " << dim_name <<
-          // std::endl;
+          // std::cout << "down_inner_inner: " << down_inner_inner << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = down_inner_inner;
-          ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
-          neighbors_config_key.push_back(config_key);
+          if (pz % tmp_config[dim_name][0] == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
         }
       }
     }
@@ -1136,31 +1144,31 @@ void SketchPolicyNode::NodeMove(
   total_results->clear();
   State newState = neighbour_table[0][0];
   // move newstate to each array<state> in next_states
-  // std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
+  // //std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
   // for (int i = 0; i < next_states.size(); i++) { 
-  //   std::cout << "[NodeMove]i = " << i << std::endl;
-  //   std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
+  //   //std::cout << "[NodeMove]i = " << i << std::endl;
+  //   //std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
   //   if (!next_states[i]->empty()) {
   //     // array[0] = std::move(newState);
   //     // array[0] is const , so pop it then push_back
   //     next_states[i]->pop_back();
   //     next_states[i]->push_back(std::move(newState));
-  //     std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
+  //     //std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
   //   } else {
   //     next_states[i]->push_back(std::move(newState));
   //   }
   // }
-  // std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
+  // //std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
   // return ;
 
   // if (!next_states->empty()) {
   //     // next_states 不为空，向每个 Array<State> 添加 newState
-  //     std::cout << "next_states is not empty" << std::endl;
+  //     //std::cout << "next_states is not empty" << std::endl;
   //     for (int i = 0; i < next_states->size(); i++) {
   //         (*next_states)[i].push_back(newState);
   //     }
   // } else {
-  //     std::cout << "next_states is empty" << std::endl;
+  //     //std::cout << "next_states is empty" << std::endl;
   //     // next_states 为空，先添加一个新的 Array<State>
   //     Array<State> newArray;
   //     newArray.push_back(newState);
@@ -1171,12 +1179,12 @@ void SketchPolicyNode::NodeMove(
   //     // array[0] is const , so pop it then push_back
   //     array.pop_back();
   //     array.push_back(std::move(newState));
-  //     std::cout << "[NodeMove]array size = " << array.size() << std::endl;
+  //     //std::cout << "[NodeMove]array size = " << array.size() << std::endl;
   //   } else {
   //     array.push_back(std::move(newState));
   //   }
   // }
-  // std::cout << "[NodeMove] size of next_states = " << next_states->size() << std::endl;
+  // //std::cout << "[NodeMove] size of next_states = " << next_states->size() << std::endl;
   // return;
   Array<State> local_min;
   std::mutex visited_mutex;
@@ -1185,7 +1193,7 @@ void SketchPolicyNode::NodeMove(
   std::vector<std::vector<float>> vec_pop_scores;
   for (auto path : neighbour_table) {
     if (path.empty()) {
-      std::cout << "path is empty" << std::endl;
+      //std::cout << "path is empty" << std::endl;
       continue;
     }
     std::vector<float> tmp;
@@ -1195,14 +1203,14 @@ void SketchPolicyNode::NodeMove(
   }
 
   for (int index = 0; index < neighbour_table.size(); index++) {
-   std::cout << "[NodeMove]Node index = " << index << std::endl;
+   //std::cout << "[NodeMove]Node index = " << index << std::endl;
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
     // if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
     //   // Invalid and no neighbors
     //   // TODO: will resample init rethink logic
-    //   std::cout << "Invalid and no neighbors, re-sample" << std::endl;
+    //   //std::cout << "Invalid and no neighbors, re-sample" << std::endl;
     //   // clear next_states[index]
     //   next_states[index]->pop_back();
     //   continue;
@@ -1222,13 +1230,13 @@ void SketchPolicyNode::NodeMove(
     MeasureResult best_result;// base 
     bool best_result_valid = false;
     int topn = std::min(window_size, static_cast<int>(loal_path_neighbors.size()));
-    std::cout << "topn = " << topn << std::endl;
+    //std::cout << "topn = " << topn << std::endl;
     
     while (max_idx == 0 && window_start + topn <= static_cast<int>(loal_path_neighbors.size())) {
-      std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
-      std::cout << "window_start = " << window_start << std::endl;
-      std::cout << "topn = " << topn << std::endl;
-      std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
+      //std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
+      //std::cout << "window_start = " << window_start << std::endl;
+      //std::cout << "topn = " << topn << std::endl;
+      //std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
 
       // tolerant_score > than any neighbor score idx from window_start to window_start + topn
       if (tolerant_score > neighbour_scores[indices[window_start]]) {
@@ -1274,7 +1282,7 @@ void SketchPolicyNode::NodeMove(
 
       // get all the gflops for each path
       std::vector<float> gflops_per_path;
-      std::cout << "gflops: ";
+      //std::cout << "gflops: ";
       int iter = 0;
       bool has_valid = false;
       for (auto res : results) {
@@ -1284,11 +1292,11 @@ void SketchPolicyNode::NodeMove(
           has_valid = true;
         }
         gflops_per_path.push_back(gflops);
-        std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
+        //std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
       }
-      std::cout << std::endl;
+      //std::cout << std::endl;
       if (!has_valid) {
-        std::cout << "no valid gflops, re-sample" << std::endl;
+        //std::cout << "no valid gflops, re-sample" << std::endl;
         continue;
       }
 
@@ -1303,30 +1311,30 @@ void SketchPolicyNode::NodeMove(
         }
       }
 
-      std::cout << "moving to max_idx = " << max_idx << std::endl;
+      //std::cout << "moving to max_idx = " << max_idx << std::endl;
 
       std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
       const auto state_str = state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
       if (max_idx != 0 && visited.count(state_str) == 0) {
         visited.insert(state_str);
-        std::cout << "find a fast neigbour, leave" << std::endl;
+        //std::cout << "find a fast neigbour, leave" << std::endl;
         //push to next_states[index][0]
         // need to get address of next_states[index][0]
         // Array<State>& array = (*next_states)[index];
         // array.push_back(good_from_predict[max_idx]);
-        // std::cout << "after: size of (*next_states)[index] = " << (*next_states)[index].size() << std::endl;
+        // //std::cout << "after: size of (*next_states)[index] = " << (*next_states)[index].size() << std::endl;
 
-        std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
+        //std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
         if (!next_states[index]->empty()) {
           // array[0] = std::move(newState);
           // array[0] is const , so pop it then push_back
           next_states[index]->pop_back();
           next_states[index]->push_back(std::move(good_from_predict[max_idx]));
-          std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
+          //std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
         } else {
           next_states[index]->push_back(std::move(good_from_predict[max_idx]));
         }
-        std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
+        //std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
         
         continue;
       }
@@ -1334,7 +1342,7 @@ void SketchPolicyNode::NodeMove(
     } // end regular Direct+Diag
 
     if (max_idx == 0) {  // random n hop
-      std::cout << "base is a 2-hop local min, sampling 30 random n-hop.." << std::endl;
+      //std::cout << "base is a 2-hop local min, sampling 30 random n-hop.." << std::endl;
       std::map<int, ConfigKey> tmp_conf_table;
       int idx_conf_table = 0;
       std::vector<splitMeta*> v_splitMeta_info;
@@ -1373,15 +1381,15 @@ void SketchPolicyNode::NodeMove(
       program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
       // sort by pop_scores_nhop and get the top30
       std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
-      std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+      //std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
 
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
       topn = std::min(sampled_topK, static_cast<int>(sampled_states.size()));
-      std::cout << "randome jump topn = " << topn << std::endl;
-      std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
-      std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
-      std::cout << "size of sampled_topK " << sampled_topK << std::endl;
+      //std::cout << "randome jump topn = " << topn << std::endl;
+      //std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
+      //std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+      //std::cout << "size of sampled_topK " << sampled_topK << std::endl;
       while (n_hop_max_idx == 0 && n_hop_window_start + topn <= std::min(sampled_topK, static_cast<int>(sampled_states.size()))) {
         Array<State> good_from_predict;
         std::vector<float> window_score;
@@ -1419,7 +1427,7 @@ void SketchPolicyNode::NodeMove(
 
         // get all the gflops for each path
         std::vector<float> gflops_per_path;
-        std::cout << "random nhop neighbors' gflops: ";
+        //std::cout << "random nhop neighbors' gflops: ";
         int iter = 0;
         bool has_valid = false;
         for (auto res : results) {
@@ -1429,11 +1437,11 @@ void SketchPolicyNode::NodeMove(
             has_valid = true;
           }
           gflops_per_path.push_back(gflops);
-          std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
+          //std::cout << "idx " << iter++ << " gflops " << gflops << ", ";
         }
-        std::cout << std::endl;
+        //std::cout << std::endl;
         if (!has_valid) {
-          std::cout << "no valid gflops, re-sample" << std::endl;
+          //std::cout << "no valid gflops, re-sample" << std::endl;
           continue;
         }
 
@@ -1447,7 +1455,7 @@ void SketchPolicyNode::NodeMove(
             n_hop_max_idx = i;
           }
         }
-        std::cout << "moving to n_hop_max_idx = " << n_hop_max_idx << std::endl;
+        //std::cout << "moving to n_hop_max_idx = " << n_hop_max_idx << std::endl;
 
         std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[n_hop_max_idx]);
         const auto state_str = state_to_string(good_from_predict[n_hop_max_idx], tmp_meta_info, search_task);
@@ -1457,20 +1465,20 @@ void SketchPolicyNode::NodeMove(
           // next_states->push_back(good_from_predict[n_hop_max_idx]);
           // return;
           // push to next_states
-          // std::cout << "push to next_states" << std::endl;
+          // //std::cout << "push to next_states" << std::endl;
           // local_next_states->push_back(good_from_predict[n_hop_max_idx]); 
 
-          std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
+          //std::cout << "before: size of next_states[index] = " << next_states[index]->size() << std::endl;
           if (!next_states[index]->empty()) {
             // array[0] = std::move(newState);
             // array[0] is const , so pop it then push_back
             next_states[index]->pop_back();
             next_states[index]->push_back(std::move(good_from_predict[n_hop_max_idx]));
-            std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
+            //std::cout << "[NodeMove]array size = " << next_states[index]->size() << std::endl;
           } else {
             next_states[index]->push_back(std::move(good_from_predict[n_hop_max_idx]));
           }
-          std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
+          //std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
           
           break;
         } else {
@@ -1619,7 +1627,7 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
   pz_factors.insert(tmp_sm_factors.begin(), tmp_sm_factors.end());
 
 
-  PrintTitle("Generate Base States", verbose);
+  // PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
   int idx = 0;
@@ -1639,7 +1647,7 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
     // reserve space for next_states[i]
     next->reserve(1);
     if (next->empty()) {
-      std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
+      // std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
       auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
       // push back to next_states[i]
       next->push_back(tmp_pop[0]);
@@ -1648,16 +1656,16 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
     init_population.push_back((*next)[0]);
   }
 
-  std::cout << "Base nodes #" << init_population.size() << std::endl;
-  PrintTitle("Generate Neighbours", verbose);
+  // std::cout << "Base nodes #" << init_population.size() << std::endl;
+  // PrintTitle("Generate Neighbours", verbose);
   Array<Array<State>> neighbour_table =
       GenerateNeighbours(init_population, pz_factors, sketch_cache_, v_splitMeta_info);
-  PrintTitle("Node Move", verbose);
+  // PrintTitle("Node Move", verbose);
   Array<MeasureInput> total_inputs;
   Array<MeasureResult> total_results;
   NodeMove(neighbour_table, next_states, pz_factors, &total_inputs, &total_results, *model_age,
            measurer);
-  std::cout << "next_states size " << next_states.size() << std::endl;
+  // std::cout << "next_states size " << next_states.size() << std::endl;
 
   program_cost_model->Update(total_inputs, total_results);
   (*model_age) += 1;
