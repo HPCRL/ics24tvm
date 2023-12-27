@@ -1469,12 +1469,13 @@ void SketchPolicyNode::NodeMove(
           }
           std::cout << "after: size of next_states[index] = " << next_states[index]->size() << std::endl;
           
-          continue;
+          break;
         } else {
           if (!next_states[index]->empty()) {
             // clear next_states[index] to re-sample
             next_states[index]->pop_back();
           }
+          break;
         }
         topn = std::min(topn, static_cast<int>(sampled_states.size() - n_hop_window_start));
       } //end while loop of nhop
