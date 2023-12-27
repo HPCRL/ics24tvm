@@ -687,7 +687,7 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto down_reg_index = reg_index - 1;
         auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
         // valid
-        if (down_reg <= tb ) {
+        if (down_reg <= tb) {
           // std::cout << "down_reg: " << down_reg << std::endl;
           tmp_config[dim_name][0] = down_reg;
           ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
@@ -1572,12 +1572,15 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
 
 std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
   std::unordered_set<int> sm_ts;
+  int Npz = *std::max_element(reg_tile_factors.begin(), reg_tile_factors.end());
   for (int i = 0; i < reg_tile_factors.size(); i++){
     for (int j = i; j < reg_tile_factors.size(); j++){
+      if (reg_tile_factors[i]*reg_tile_factors[j] <= Npz && Npz % (reg_tile_factors[i]*reg_tile_factors[j]) == 0) // gaurantee no partial tile
         sm_ts.insert(reg_tile_factors[i]*reg_tile_factors[j]);
     }
   }
   std::vector<int> sm_factors(sm_ts.begin(), sm_ts.end());
+  std::sort(sm_factors.begin(), sm_factors.end());
   return sm_factors;
 }
 
@@ -1599,7 +1602,11 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
   std::unordered_map<std::string, std::vector<int>> pz_factors;
   pz_factors = GetFactorInfo(
       this, &state,
-      v_splitMeta_info);  // Calculate factor list problem size --> 6 factor[1, 2, 3, 6]
+      v_splitMeta_info);  // Calculate factor list problem size --> N = 6 factor[1, 2, 3, 6]
+  
+  // reg --> 2
+  // tb --> 2
+  // sm = tb*reg
 
   //current pz use it as reg_tile_factors;
   std::unordered_map<std::string, std::vector<int>> tmp_sm_factors;
