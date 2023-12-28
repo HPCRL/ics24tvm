@@ -1207,12 +1207,14 @@ void SketchPolicyNode::NodeMove(
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
+    // // should we prune out the base state?
     // if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
     //   // Invalid and no neighbors
     //   // TODO: will resample init rethink logic
     //   //std::cout << "Invalid and no neighbors, re-sample" << std::endl;
     //   // clear next_states[index]
     //   next_states[index]->pop_back();
+    //   count_sampled --;
     //   continue;
     // }
 
@@ -1238,8 +1240,8 @@ void SketchPolicyNode::NodeMove(
       //std::cout << "topn = " << topn << std::endl;
       //std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
 
-      // tolerant_score > than any neighbor score idx from window_start to window_start + topn
-      if (tolerant_score > neighbour_scores[indices[window_start]]) {
+      // tolerant_score threshold
+      if (tolerant_score > neighbour_scores[indices[window_start]] || neighbour_scores[indices[window_start]] < 0) {
         break;
       }
 
@@ -1259,6 +1261,11 @@ void SketchPolicyNode::NodeMove(
       Array<MeasureInput> inputs = PackState(good_from_predict, good_from_predict.size());
       Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                         inputs, window_score, model_age);
+      if (results.size() == 1 || topn == 0) {
+        // only base, break" << std::endl;
+        break;
+      }
+
       if (!best_result_valid || FloatArrayMean(results[0]->costs) < FloatArrayMean(best_result->costs)) {
         // update best result
         best_result = results[0];
@@ -1338,7 +1345,14 @@ void SketchPolicyNode::NodeMove(
         
         continue;
       }
-      topn = std::min(topn, static_cast<int>(loal_path_neighbors.size() - window_start));
+      if (window_start + topn > static_cast<int>(loal_path_neighbors.size())) {
+        // reach the end
+        break;
+      }
+      else {
+        topn = std::min(window_size, static_cast<int>(loal_path_neighbors.size()) - window_start);
+        //std::cout << "topn = " << topn << std::endl;
+      }
     } // end regular Direct+Diag
 
     if (max_idx == 0) {  // random n hop
