@@ -2054,6 +2054,14 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
       int sm_reduction = spm->tile_sizes[1] * spm->tile_sizes[2];
       int pz = spm->problem_size;
+      int outer_sm = pz/sm_reduction;
+      // outer sm smaller than sm need
+      if (outer_sm > sm_reduction){
+        for (int i = 0; i < 7; i++){
+          features->push_back(0.0);
+        }
+        return std::make_tuple(-1, -1, -1, -1);
+      }
 
       if (spm->origin_itr->name == true_reduction_index[0]){// rc
         true_reduction_data_map[spm->origin_itr->name] = {sm_reduction, pz};
