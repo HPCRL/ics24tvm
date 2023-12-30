@@ -1207,16 +1207,16 @@ void SketchPolicyNode::NodeMove(
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
 
-    // // should we prune out the base state?
-    // if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
-    //   // Invalid and no neighbors
-    //   // TODO: will resample init rethink logic
-    //   //std::cout << "Invalid and no neighbors, re-sample" << std::endl;
-    //   // clear next_states[index]
-    //   next_states[index]->pop_back();
-    //   count_sampled --;
-    //   continue;
-    // }
+    // should we prune out the base state?
+    if (pop_scores.size() - 1 == 0 || pop_scores[0] == -std::numeric_limits<float>::infinity()) {
+      // Invalid and no neighbors
+      // TODO: will resample init rethink logic
+      //std::cout << "Invalid and no neighbors, re-sample" << std::endl;
+      // clear next_states[index]
+      next_states[index]->pop_back();
+      count_sampled --;
+      continue;
+    }
 
     float base_score = pop_scores[0];
     float tolerant_score = 0.6 * base_score;

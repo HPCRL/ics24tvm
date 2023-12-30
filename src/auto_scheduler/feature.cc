@@ -2056,12 +2056,9 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       int pz = spm->problem_size;
       int outer_sm = pz/sm_reduction;
       // outer sm smaller than sm need
-      if (outer_sm > sm_reduction){
-        for (int i = 0; i < 7; i++){
-          features->push_back(0.0);
-        }
-        return std::make_tuple(-1, -1, -1, -1);
-      }
+      // if (outer_sm > sm_reduction){
+      //   return std::make_tuple(-1, -1, -1, -1);
+      // }
 
       if (spm->origin_itr->name == true_reduction_index[0]){// rc
         true_reduction_data_map[spm->origin_itr->name] = {sm_reduction, pz};
@@ -2447,61 +2444,70 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
   //   return std::make_tuple(-1, -1, -1, -1);
   // }
-  if (pz_rx == 7){ // KW/KH = 7
+  // if (pz_rx == 7){ // KW/KH = 7
     
-    if (sm_rx != 7 || sm_ry != 7){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
+  //   if (sm_rx != 7 || sm_ry != 7){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
 
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  } else if (pz_rc == 3){// rgb = 3
-    if (sm_rx != 3 || sm_ry != 3){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
+  //   if ( reg_yy != 1){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // } else if (pz_rc == 3){// rgb = 3
+  //   if (sm_rx != 3 || sm_ry != 3){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
 
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
+  //   if (reg_ff > 30 || reg_xx > 30) {
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
 
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
+  //   if ( reg_yy != 1){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
+  // else if (pz_rx == 1){ // KW/KH = 1
+  //   if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if (reg_ff > 30 || reg_xx > 30) {
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if ( reg_yy != 1){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
+  // else{
+  //   if (sm_rx != 3 || sm_ry != 3){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if (sm_rc > 64){// no too large input SM
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if (reg_ff > 30 || reg_xx > 30) {
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+
+  //   if ( reg_yy != 1){
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
+
+  // check bank conflict, regff*sm_rc*sm_rx*sm_ry mod 32 == 0 possible bank conflict
+  if ((reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0) && (tb_xx*tb_yy < 32)){
+    return std::make_tuple(-1, -1, -1, -1);
   }
-  else if (pz_rx == 1){ // KW/KH = 1
-    if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
 
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
-  else{
-    if (sm_rx != 3 || sm_ry != 3){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (sm_rc > 64){// no too large input SM
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if (reg_ff > 30 || reg_xx > 30) {
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-
-    if ( reg_yy != 1){
-      return std::make_tuple(-1, -1, -1, -1);
-    }
+  if (tb_xx*tb_yy < 32){
+    return std::make_tuple(-1, -1, -1, -1);
   }
 
   if (thread_block_size < 32 || thread_block_size > 1024){
@@ -2756,9 +2762,9 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     int maxDynamicSharedMemorySize = task->hardware_params->max_shared_memory_per_block / 4; // bytes
     std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize);
     if (a==-1){
-      // set all features to -1
+      features_extracted.clear();
       for (int i = 0; i < 7; i++){
-        features_extracted[i] = 0;
+        features_extracted.push_back(0);
       }
     }
 
