@@ -2506,10 +2506,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     return std::make_tuple(-1, -1, -1, -1);
   }
 
-  // if (tb_xx*tb_yy < 32){
-  //   return std::make_tuple(-1, -1, -1, -1);
-  // }
-
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
   }
