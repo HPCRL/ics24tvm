@@ -2475,18 +2475,18 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   OI_Global = computeOI_Global(global_trans, parallel_data_map, true_reduction_data_map, stencil_reduction_data_map);
 
   // kernel buffer size
-  int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry;
+  int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry * tb_ff;
   int bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
   // std::cout << "bc " << bc << std::endl;
   // check bank conflict
-  if (reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0){
+  if (sm_rc*sm_rx*sm_ry % 32 == 0){
     shared_trans += bc;
   }
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
   // output: nn * ff * yy * xx
   int ouput_reg = reg_ff * reg_yy * reg_xx;
-  OI_Shared = thread_block_size * ouput_reg * 1.0 / shared_trans;
+  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans;
 
   // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
@@ -2498,7 +2498,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(ILP);
   features->push_back(WLP);
   features->push_back(Concurrent_estimate);
-  features->push_back(totalReuse);
+  // features->push_back(totalReuse);
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
   
