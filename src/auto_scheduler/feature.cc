@@ -1783,13 +1783,71 @@ std::vector<splitMeta*> generateSplitMeta(const SearchTask& task, const State& s
   return v_splitMeta_info;
 }
 
+// for the case tbx * tby > 32
+/**
+ * suppose 98 elements, 49 per step,
+ * we have 1 bank conflict at 2nd warp load
+*/
+int shift_warp(int total_load_elements, int step_len)
+{
+    int addition_load = 0;
+    int cur_step_max = step_len;
+    for (int warp_end = 0; warp_end <= total_load_elements; warp_end += 32)
+    {
+        if (warp_end > cur_step_max)
+        {
+            addition_load++;
+            cur_step_max += step_len;
+        }
+    }
+    //int no_bc_load = std::ceil(total_load_elements / 32);   // n warp level boardcast load
+    return addition_load;
+}
+
+
+// for the case tbx * tby < 32
+/**
+ * suppose 98 elements, 7 per step,
+ * we have 5 bank conflict at 1st warp load
+ * we have 6 bank conflict at 2nd warp load
+ * we have 5 bank conflict at 3d warp load
+*/
+int shift_step(int total_load_elements, int step_len)
+{
+    int total_boardcast_bc = -1;
+    int warp_num = 1;
+    int addtion_load = 0;
+    for (int cur_step_end = 0; cur_step_end <= total_load_elements; cur_step_end += step_len)
+    {
+        total_boardcast_bc++;
+        if (cur_step_end > 32 * warp_num)
+        {
+            warp_num++;
+            addtion_load++;
+        }
+    }
+    return total_boardcast_bc + addtion_load;
+}
+
+// for kernel side bc, total_load_elements = volume of the kernel sm buffer
+int kernel_bc_additional(int Tbx, int Tby, int total_load_elements)
+{
+    int step_len = Tbx * Tby;
+    if (step_len % 32 == 0)
+        return 0;   // if all elements load the same val, boardcasting, no bankconflict
+    if (step_len > 32)
+        return shift_warp(total_load_elements, step_len);
+    else
+        return shift_step(total_load_elements, step_len);
+}
+
 std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features, int num_sm, int maxDynamicSharedMemorySize) {
   std::map<std::string, ParallelDataStruct> parallel_data_map;
   std::map<std::string, TrueReductionData> true_reduction_data_map;
   std::map<std::string, StencilReductionData> stencil_reduction_data_map;
 
   // std::cout << "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
-  float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM;
+  float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM, OI_Shared;
   // initialize them here
   ILP = 0.0;
   WLP = 0.0;
@@ -1800,6 +1858,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   float global_trans = (*features)[0];
   float est_occupancy = (*features)[1];
+  float shared_trans = (*features)[2];
   features->clear();
 
   // std::cout << task->compute_dag << std::endl;
@@ -2415,6 +2474,20 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   Concurrent_estimate = WLP*ILP;
   OI_Global = computeOI_Global(global_trans, parallel_data_map, true_reduction_data_map, stencil_reduction_data_map);
 
+  // kernel buffer size
+  int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry;
+  int bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
+  // std::cout << "bc " << bc << std::endl;
+  // check bank conflict
+  if (reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0){
+    shared_trans += bc;
+  }
+  // (Single thread block computed product(TB)) * (product(reg) of output)
+  // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
+  // output: nn * ff * yy * xx
+  int ouput_reg = reg_ff * reg_yy * reg_xx;
+  OI_Shared = thread_block_size * ouput_reg * 1.0 / shared_trans;
+
   // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
   // std::cout << "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
@@ -2427,6 +2500,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(Concurrent_estimate);
   features->push_back(totalReuse);
   features->push_back(OI_Global);
+  features->push_back(OI_Shared);
   
   // std::cout << "---Feature---" << std::endl;
   // std::cout << "thread_block_size " << thread_block_size << std::endl;
@@ -2501,10 +2575,10 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   //   }
   // }
 
-  // check bank conflict, regff*sm_rc*sm_rx*sm_ry mod 32 == 0 possible bank conflict
-  if ((reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0) && (tb_xx*tb_yy < 32)){
-    return std::make_tuple(-1, -1, -1, -1);
-  }
+//   // check bank conflict, regff*sm_rc*sm_rx*sm_ry mod 32 == 0 possible bank conflict
+//   if ((reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0) && (tb_xx*tb_yy < 32)){
+//     return std::make_tuple(-1, -1, -1, -1);
+//   }
 
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
@@ -2732,7 +2806,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // exit(-1);
     assert(feature->size() == 4);
     float global_trans  = (*feature)[1];
-    // float shared_trans  = (*feature)[2];
+    float shared_trans  = (*feature)[2];
     float est_occupancy = (*feature)[3];
 
     // std::cout << "global_trans: "   << global_trans   << std::endl;
@@ -2745,9 +2819,10 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::cout << "state " << state << std::endl;
 
     std::vector<float> features_extracted;
-    features_extracted.reserve(7);
+    features_extracted.reserve(8);
     features_extracted.push_back(global_trans);
     features_extracted.push_back(est_occupancy);
+    features_extracted.push_back(shared_trans);
 
 
     std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
@@ -2759,7 +2834,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize);
     if (a==-1){
       features_extracted.clear();
-      for (int i = 0; i < 7; i++){
+      for (int i = 0; i < 8; i++){
         features_extracted.push_back(0);
       }
     }
