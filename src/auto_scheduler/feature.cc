@@ -2640,7 +2640,8 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp / xacc_fea.vector_len;
       // std::cout << "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
-      if (xacc_fea.scope == "shared") {
+      if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
+        // only accumulate shared mem read to shared_trans
         shared_trans += warp_trans;
       }
       else if (xacc_fea.scope == "global") {
