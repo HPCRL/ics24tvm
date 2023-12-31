@@ -1859,6 +1859,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   float global_trans = (*features)[0];
   float est_occupancy = (*features)[1];
   float shared_trans = (*features)[2];
+  int num_TB = (*features)[3];
+  float shared_trans_per_tb = shared_trans / num_TB;
   features->clear();
 
   // std::cout << task->compute_dag << std::endl;
@@ -2476,17 +2478,18 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   // kernel buffer size
   int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry * tb_ff;
-  int bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
+  int bc;
   // std::cout << "bc " << bc << std::endl;
   // check bank conflict
   if (sm_rc*sm_rx*sm_ry % 32 == 0){
-    shared_trans += bc;
+    shared_trans_per_tb += bc;
+    bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
   }
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
   // output: nn * ff * yy * xx
   int ouput_reg = reg_ff * reg_yy * reg_xx;
-  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans;
+  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans_per_tb;
 
   // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
@@ -2704,6 +2707,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   ret->push_back(global_trans);
   ret->push_back(shared_trans);
   ret->push_back(occupancy);
+  ret->push_back(num_TB);
   // (*ret)[0] = 1;
   // (*ret)[1] = global_trans;
   // (*ret)[2] = shared_trans;
@@ -2804,10 +2808,11 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
 
     // std::cout << "feature size : " << feature->size() << std::endl;
     // exit(-1);
-    assert(feature->size() == 4);
+    assert(feature->size() == 5);
     float global_trans  = (*feature)[1];
     float shared_trans  = (*feature)[2];
     float est_occupancy = (*feature)[3];
+    int num_TB          = (*feature)[4];
 
     // std::cout << "global_trans: "   << global_trans   << std::endl;
     // std::cout << "shared_trans: "   << shared_trans   << std::endl;
@@ -2823,6 +2828,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     features_extracted.push_back(global_trans);
     features_extracted.push_back(est_occupancy);
     features_extracted.push_back(shared_trans);
+    features_extracted.push_back(num_TB);
 
 
     std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
