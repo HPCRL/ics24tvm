@@ -283,7 +283,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       // std::cout << "Num of sampled: #" << count_sampled << std::endl;
                 
       // TODO: if sample more than 32, break
-      if (count_sampled > 2+init_num) {
+      if (count_sampled >= 2+init_num) {
         break;
       }
 
