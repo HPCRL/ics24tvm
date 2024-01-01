@@ -41,7 +41,7 @@ DEFAULT_MAX_N_BUFS = 5
 
 # The length of the feature vector
 # DEFAULT_FEATURE_VEC_LEN = 164
-DEFAULT_FEATURE_VEC_LEN = 8
+DEFAULT_FEATURE_VEC_LEN = 7
 # The size of int and float in bytes
 SIZE_OF_INT32 = 4
 SIZE_OF_FLOAT32 = 4

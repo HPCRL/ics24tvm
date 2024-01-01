@@ -2825,7 +2825,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::cout << "state " << state << std::endl;
 
     std::vector<float> features_extracted;
-    features_extracted.reserve(8);
+    features_extracted.reserve(7);
     features_extracted.push_back(global_trans);
     features_extracted.push_back(est_occupancy);
     features_extracted.push_back(shared_trans);
@@ -2841,7 +2841,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize);
     if (a==-1){
       features_extracted.clear();
-      for (int i = 0; i < 8; i++){
+      for (int i = 0; i < 7; i++){
         features_extracted.push_back(0);
       }
     }
