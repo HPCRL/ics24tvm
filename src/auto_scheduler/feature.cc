@@ -2653,9 +2653,11 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   int num_warp = std::ceil( (float)block_dimx*block_dimy*block_dimz/32);
 
 
-  int global_trans = 0;
-  int shared_trans = 0;
-  int local_trans = 0;
+  long long global_trans = 0;
+  long long shared_trans = 0;
+  long long local_trans = 0;
+  long long shared_trans_input = 0;
+  long long shared_trans_kernel = 0;
 
   //Need to design return
   for (const auto& x : extractor.xbuffer_features){
@@ -2672,6 +2674,11 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       //std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
+        if (xacc_fea.buffer_name.find("input") != std::string::npos){
+            shared_trans_input += warp_trans;
+        } else if (xacc_fea.buffer_name.find("kernel") != std::string::npos){
+            shared_trans_kernel += warp_trans;
+        }
         // only accumulate shared mem read to shared_trans
         shared_trans += warp_trans;
       }
@@ -2741,6 +2748,8 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   ret->push_back(shared_trans);
   ret->push_back(occupancy);
   ret->push_back(num_TB);
+  ret->push_back(shared_trans_input);
+  ret->push_back(shared_trans_kernel);
   // (*ret)[0] = 1;
   // (*ret)[1] = global_trans;
   // (*ret)[2] = shared_trans;
@@ -2840,11 +2849,13 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
 
     // std::cout << "feature size : " << feature->size() << std::endl;
-    assert(feature->size() == 5);
+    // assert(feature->size() == 5);
     float global_trans  = (*feature)[1];
     float shared_trans  = (*feature)[2];
     float est_occupancy = (*feature)[3];
     int num_TB          = (*feature)[4];
+    long long shared_trans_input  = (*feature)[5];
+    long long shared_trans_kernel  = (*feature)[6];
 
     // std::cout << "global_trans: "   << global_trans   << std::endl;
     // std::cout << "shared_trans: "   << shared_trans   << std::endl;
@@ -2861,6 +2872,10 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     features_extracted.push_back(est_occupancy);
     features_extracted.push_back(shared_trans);
     features_extracted.push_back(num_TB);
+    
+    // std::cout << "read_shared_trans_input : " << shared_trans_input << std::endl;
+    // std::cout << "read_shared_trans_kenel : " << shared_trans_kernel << std::endl;
+    // std::cout << "total_read_shared_trans : " << shared_trans << std::endl;
 
 
     std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
