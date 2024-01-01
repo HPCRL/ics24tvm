@@ -1826,7 +1826,7 @@ int shift_step(int total_load_elements, int step_len)
             addtion_load++;
         }
     }
-    return total_boardcast_bc + addtion_load;
+    return total_boardcast_bc + addtion_load - warp_num;
 }
 
 // for kernel side bc, total_load_elements = volume of the kernel sm buffer
@@ -2482,14 +2482,14 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout << "bc " << bc << std::endl;
   // check bank conflict
   if (sm_rc*sm_rx*sm_ry % 32 == 0){
-    shared_trans_per_tb += bc;
     bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
+    shared_trans_per_tb += bc;
   }
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
   // output: nn * ff * yy * xx
   int ouput_reg = reg_ff * reg_yy * reg_xx;
-  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans_per_tb;
+  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans_per_tb / 32.0;
 
   // std::cout << " state : " << state << std::endl; 
   // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
@@ -2637,7 +2637,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
       //std::cout << "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
       // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-      int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp / xacc_fea.vector_len;
+      int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
       // std::cout << "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
@@ -2645,6 +2645,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
         shared_trans += warp_trans;
       }
       else if (xacc_fea.scope == "global") {
+        warp_trans = warp_trans / xacc_fea.vector_len;
         global_trans += warp_trans;
       }
       else if (xacc_fea.scope == "local") {
