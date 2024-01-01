@@ -1846,7 +1846,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   std::map<std::string, TrueReductionData> true_reduction_data_map;
   std::map<std::string, StencilReductionData> stencil_reduction_data_map;
 
-  // std::cout << "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
+  //std::cout<< "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
   float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM, OI_Shared;
   // initialize them here
   ILP = 0.0;
@@ -1861,45 +1861,46 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   float shared_trans = (*features)[2];
   int num_TB = (*features)[3];
   float shared_trans_per_tb = shared_trans / num_TB;
+  //std::cout<< "num_tb " << num_TB << std::endl;
   features->clear();
 
-  // std::cout << task->compute_dag << std::endl;
+  //std::cout<< task->compute_dag << std::endl;
   IndexExtractor index_extract;
   std::string output_FVI;
   std::vector<std::string> par_order_array;
   for (const auto& op : task->compute_dag->ops) {
-    // std::cout << "size of ops " << task->compute_dag->ops.size() << std::endl;
-    // std::cout << "current op " << op << std::endl;
+    //std::cout<< "size of ops " << task->compute_dag->ops.size() << std::endl;
+    //std::cout<< "current op " << op << std::endl;
      if (auto cop = op.as<te::ComputeOpNode>()) {
-      // std::cout << "----------------------------------------" << std::endl;
-      // std::cout << "cop->name " << cop->name << std::endl;
+      //std::cout<< "----------------------------------------" << std::endl;
+      //std::cout<< "cop->name " << cop->name << std::endl;
       if (cop->name.find("temp") == std::string::npos) { 
-        // std::cout << "cop->name include temp " << cop->name << std::endl;
+        //std::cout<< "cop->name include temp " << cop->name << std::endl;
         output_FVI = cop->axis[cop->axis.size()-1]->var->name_hint;
 
         for (int i = cop->axis.size()-1; i > -1; i--){
           par_order_array.push_back(cop->axis[i]->var->name_hint);
-          // std::cout << "output index order   " << cop->axis[i]->var->name_hint << std::endl;
+          //std::cout<< "output index order   " << cop->axis[i]->var->name_hint << std::endl;
         }
 
-        // std::cout << cop->name << " ----" <<cop->body << std::endl;
-        // std::cout << "name: " << cop->name << std::endl;
-        // std::cout << "tag: " << cop->tag << std::endl;
-        // std::cout << "attrs: " << cop->attrs << std::endl;
-        // std::cout << "axis: " << cop->axis << std::endl;
-        // std::cout << "reduce_axis: " << cop->reduce_axis << std::endl;
-        // std::cout << "body: " << cop->body << std::endl;
-        // std::cout << "----------------------------------------" << std::endl;
+        //std::cout<< cop->name << " ----" <<cop->body << std::endl;
+        //std::cout<< "name: " << cop->name << std::endl;
+        //std::cout<< "tag: " << cop->tag << std::endl;
+        //std::cout<< "attrs: " << cop->attrs << std::endl;
+        //std::cout<< "axis: " << cop->axis << std::endl;
+        //std::cout<< "reduce_axis: " << cop->reduce_axis << std::endl;
+        //std::cout<< "body: " << cop->body << std::endl;
+        //std::cout<< "----------------------------------------" << std::endl;
 
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
         for (auto p : ttt) {
-          // std::cout << "p buffer " << p.first->name << std::endl;
+          //std::cout<< "p buffer " << p.first->name << std::endl;
           // int reg_buffer_size = 1;
           for (auto vv : p.second) {  // buffer access
-            // std::cout << Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               index_extract.Extract(indx);
-              // std::cout << "indx : " << indx << std::endl;
+              //std::cout<< "indx : " << indx << std::endl;
             }
           }
         }
@@ -1910,18 +1911,17 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   //remove stencil from reduction
   std::vector<std::string> true_reduction_index = findDiff(index_extract.reduction_index, index_extract.stencil_index);
 
-  // std::cout << "Output FVI : " << output_FVI << std::endl;
+  //std::cout<< "Output FVI : " << output_FVI << std::endl;
   // for (auto indx : index_extract.parallel_index){
-  //   std::cout << "paralle indx : " << indx << std::endl;
+  //   //std::cout<< "paralle indx : " << indx << std::endl;
   // }
   // for (auto indx : index_extract.stencil_index){
-  //   std::cout << "stencil indx : " << indx << std::endl;
+  //   //std::cout<< "stencil indx : " << indx << std::endl;
   // }
   // for (auto indx : true_reduction_index){
-  //   std::cout << "reduction indx : " << indx << std::endl;
+  //   //std::cout<< "reduction indx : " << indx << std::endl;
   // }
 
-  // exit(-1);
 
   float totalReuse = 0.0;
 
@@ -1988,7 +1988,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (auto spm : v_splitMeta_info) {
     int step_id = spm->step_id;
-    // // std::cout << "v_splitMeta_info step_id " << step_id  << std::endl;
+    // //std::cout<< "v_splitMeta_info step_id " << step_id  << std::endl;
     auto ps = (state)->transform_steps[step_id].as<SplitStepNode>();
     int orgin_stage_id = ps->stage_id;
     auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
@@ -2039,10 +2039,10 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
   // for (auto spm : v_splitMeta_info) {
-  //   std::cout << *spm << std::endl;
+  //   //std::cout<< *spm << std::endl;
   // }
 
-  // std::cout << "-----------itr id adjust Done------------------------  " << std::endl;
+  //std::cout<< "-----------itr id adjust Done------------------------  " << std::endl;
 
   std::map<std::string, int> sm_name_val_map;
   std::map<std::string, int> reg_novth_name_val_map;
@@ -2054,8 +2054,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   int thread_block_size = 1;
   int registersUsed_per_thread = 1;
   int num_thread_per_block = 1;
-  // // std::cout << "end-----------------------------------" << std::endl;
-  // std::cout << "end-----------------------------------" << std::endl;
+  // //std::cout<< "end-----------------------------------" << std::endl;
+  //std::cout<< "end-----------------------------------" << std::endl;
   int reg_ff, reg_xx, reg_yy;
   int sm_rx, sm_ry, sm_rc;
   int pz_rc, pz_rx, pz_ry, pz_ff, pz_xx, pz_yy;
@@ -2068,12 +2068,12 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
-      // std::cout << " name=" << spm->origin_itr->name 
+      // //std::cout<< " name=" << spm->origin_itr->name 
       //           << "; Grid tile=" << spm->tile_sizes[0]
       //           << "; TB tile=" << spm->tile_sizes[2] << std::endl;
-      // std::cout << "; thread coarse=" << spm->tile_sizes[1] 
+      // //std::cout<< "; thread coarse=" << spm->tile_sizes[1] 
       //           << "; Reg=" << spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
-      // std::cout << "; SM need=" << spm->tile_sizes[2] * spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
+      // //std::cout<< "; SM need=" << spm->tile_sizes[2] * spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
 
       int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
       int pz = spm->problem_size;
@@ -2111,12 +2111,12 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       // TB tile: inner_outer
       // thread coarse: inner_inner
       // SM need: inner_inner * inner_outer
-      // std::cout << " name=" << spm->origin_itr->name 
+      // //std::cout<< " name=" << spm->origin_itr->name 
       //           << "; Grid tile=" << spm->tile_sizes[0]
       //           << "; TB tile=" << spm->tile_sizes[1] << std::endl;
-      // std::cout << "; thread coarse=" << spm->tile_sizes[2] 
+      // //std::cout<< "; thread coarse=" << spm->tile_sizes[2] 
       //           << "; Reg=" << 1 << std::endl;
-      // std::cout << "; SM need=" << spm->tile_sizes[1] * spm->tile_sizes[2] << std::endl;
+      // //std::cout<< "; SM need=" << spm->tile_sizes[1] * spm->tile_sizes[2] << std::endl;
 
       int sm_reduction = spm->tile_sizes[1] * spm->tile_sizes[2];
       int pz = spm->problem_size;
@@ -2154,43 +2154,43 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     if (spm == v_splitMeta_info.end()[-1]) {
       continue;
     }
-    // std::cout << "end-----------------------------------" << std::endl;
+    //std::cout<< "end-----------------------------------" << std::endl;
   }
 
   // check if all the reg/tb/sm are not zero
   for (auto itr : parallel_data_map ){
     if (itr.second.reg == 0 || itr.second.tb == 0 || itr.second.pz == 0){
-      std::cout << "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
+      //std::cout<< "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
     }
   }
   for (auto itr : true_reduction_data_map ){
     if (itr.second.sm == 0 || itr.second.pz == 0){
-      std::cout << "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+      //std::cout<< "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
     }
   }
   for (auto itr : stencil_reduction_data_map ){
     if (itr.second.sm == 0 || itr.second.pz == 0){
-      std::cout << "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+      //std::cout<< "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
     }
   }
 
-  // std::cout << "heuristic pruning-----------------------------------" << std::endl;
+  //std::cout<< "heuristic pruning-----------------------------------" << std::endl;
 
   // if (parallel_data_map.size()){
   //   for( auto each: parallel_data_map){
-  //     std::cout << "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
   // if (true_reduction_data_map.size()){
   //   for( auto each: true_reduction_data_map){
-  //     std::cout << "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
   // if (stencil_reduction_data_map.size()){
   //   for( auto each: stencil_reduction_data_map){
-  //     std::cout << "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
@@ -2210,7 +2210,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       auto ca = (state)->transform_steps[i + 1].as<ComputeAtStepNode>();
       int append_itr_position = ca->target_iter_id;
       int ca_target_stage_id = ca->target_stage_id + chr_offest;
-      // // std::cout << target_stage_id << "--" << ca_target_stage_id << " " << append_itr_position
+      // //std::cout<< target_stage_id << "--" << ca_target_stage_id << " " << append_itr_position
       //           << std::endl;
       cache_stage_adj_id.push_back({target_stage_id, ca_target_stage_id, append_itr_position});
       chr_offest++;
@@ -2225,13 +2225,13 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         }
       }
       auto_unroll_max_step = atoi(psn->pragma_type.c_str() + pos + 1);
-      // std::cout << "unrll factor " << auto_unroll_max_step  << std::endl;
+      //std::cout<< "unrll factor " << auto_unroll_max_step  << std::endl;
 
     }
 
 
   }
-  // std::cout << "-------------CHR CA done----------------------" << std::endl;
+  //std::cout<< "-------------CHR CA done----------------------" << std::endl;
 
   std::unordered_set<std::string> index_set;
   // TODO: what if we have more than one compute  ??
@@ -2239,7 +2239,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (const auto& op : task->compute_dag->ops) {
     if (auto cop = op.as<te::ComputeOpNode>()) {
-      // // std::cout << "------SM alloca ----------" << cop  << std::endl;
+      // //std::cout<< "------SM alloca ----------" << cop  << std::endl;
       if (cop->name.find("temp") == std::string::npos) {
         // output
         Array<PrimExpr> output_index;
@@ -2276,11 +2276,11 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   //// check buffer index information
    for (auto itr : buf_index_map){
-     // std::cout << itr.first << std::endl;
+     //std::cout<< itr.first << std::endl;
      for (auto el : itr.second){
-        // std::cout << el << " ";
+        //std::cout<< el << " ";
      }
-     // std::cout << std::endl;
+     //std::cout<< std::endl;
    }
 
    //(Approximation) op access index info from base computation
@@ -2289,36 +2289,35 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (const auto& op : task->compute_dag->ops) {
     if (auto cop = op.as<te::ComputeOpNode>()) {
-      // std::cout << "------SM alloca ----------" << cop  << std::endl;
+      //std::cout<< "------SM alloca ----------" << cop  << std::endl;
       if (cop->name.find("temp") == std::string::npos) {
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
         for (auto p : ttt) {
-          // std::cout << "p buffer " << p.first->name << std::endl;
+          //std::cout<< "p buffer " << p.first->name << std::endl;
           int sm_buffer_size = 1;
           // int reuse_factor = 1;
           for (auto vv : p.second) {  // buffer access
-            // std::cout << Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               auto index_extent = extractor.Extract(indx);
-              // std::cout << "indx : " << indx << " " << index_extent << std::endl;
+              //std::cout<< "indx : " << indx << " " << index_extent << std::endl;
               sm_buffer_size *= index_extent;
             }
           }
-          // std::cout << "buffer size " << sm_buffer_size << std::endl << std::endl;
+          //std::cout<< "buffer size " << sm_buffer_size << std::endl << std::endl;
           totalShared += sm_buffer_size;
         }
       }
     }
   }
-  // std::cout << 
-  // std::cout << "---------------SM alloction done--------------------" << " total shared: " << totalShared << std::endl;
+  //std::cout<< "---------------SM alloction done--------------------" << " total shared: " << totalShared << std::endl;
 
   int totalReg = 1;
   BuffExtractor extractor_reg(reg_name_val_map);
 
   // ad hoc for output
   for (auto itr : reg_name_val_map){
-    //std::cout << "R  " <<  itr.first << "----" << itr.second<< std::endl;
+    ////std::cout<< "R  " <<  itr.first << "----" << itr.second<< std::endl;
     totalReg *= itr.second;
   }
 
@@ -2326,29 +2325,29 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     if (auto cop = op.as<te::ComputeOpNode>()) {
       if (cop->name.find("temp") != std::string::npos) continue;
       if (cop->name.find("local") == std::string::npos) { // Yufan:: why to use "local" as keyword??
-        // std::cout << cop->name << "----" <<cop->body << std::endl;
+        //std::cout<< cop->name << "----" <<cop->body << std::endl;
 
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
 
         for (auto p : ttt) {
-          // std::cout << "p buffer " << p.first->name << std::endl;
+          //std::cout<< "p buffer " << p.first->name << std::endl;
           int reg_buffer_size = 1;
           for (auto vv : p.second) {  // buffer access
-            // std::cout << Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               auto index_extent = extractor_reg.Extract(indx);
-              // std::cout << "indx : " << indx << " " << index_extent << std::endl;
+              //std::cout<< "indx : " << indx << " " << index_extent << std::endl;
               reg_buffer_size *= index_extent;
             }
           }
-          // std::cout << "reg buffer size "  << reg_buffer_size << std::endl << std::endl;
+          //std::cout<< "reg buffer size "  << reg_buffer_size << std::endl << std::endl;
           totalReg += reg_buffer_size;
         }
       }
     }
   }
 
-  // std::cout << "------reg alloca DONE ---------- " << " total reg: " << totalReg << std::endl;
+  //std::cout<< "------reg alloca DONE ---------- " << " total reg: " << totalReg << std::endl;
 
   std::vector<std::pair<std::string, int>> loops_inandout;
   auto temp_map = reg_novth_name_val_map;
@@ -2361,16 +2360,16 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       for (size_t i = stg->iters.size()-1; i > 0; i--) {
         const Iterator& iter = stg->iters[i];
         if (static_cast<int>(iter->annotation) == 0) {
-          // std::cout << iter->name << " (" << iter->range->min << "," << iter->range->extent << ")" << std::endl;
+          //std::cout<< iter->name << " (" << iter->range->min << "," << iter->range->extent << ")" << std::endl;
           auto itvn = strip_itr_name(iter->name);
           int extent = GetIntImm(iter->range->extent);
           //kncoking out reg loop
 
-          // std::cout << itvn << "  "<<temp_map[itvn] << "?" << extent<< std::endl;
+          //std::cout<< itvn << "  "<<temp_map[itvn] << "?" << extent<< std::endl;
 
 
           if (temp_map[itvn] / extent >= 1){
-              // std::cout << "knocking" << std::endl;
+              //std::cout<< "knocking" << std::endl;
               temp_map[itvn] = temp_map[itvn]/ extent;
           }
           else{
@@ -2382,14 +2381,14 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
 
-  // std::cout << "\n--------------compute reg buffer reuse ---------------------" << std::endl;
+  //std::cout<< "\n--------------compute reg buffer reuse ---------------------" << std::endl;
   int reg_alloc = 1;
   for (auto itr : reg_name_val_map){
     reg_alloc *= itr.second;
   }
 
   // if (reg_alloc > 256){
-  //   std::cout << "WARNING! pure REG " << reg_alloc << std::endl;
+  //   //std::cout<< "WARNING! pure REG " << reg_alloc << std::endl;
   // }
 
   std::map<std::string, int> buf_reuse_map;
@@ -2403,7 +2402,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         for (auto i = 0; i < cop->axis.size(); i++) {
           output_index.push_back(PrimExpr(cop->axis[i].get()->var));
         }
-        // std::cout << output_index << std::endl;
+        //std::cout<< output_index << std::endl;
 
         for (auto indx : output_index) {
           reuse_extractor.Extract(indx);
@@ -2412,7 +2411,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         for (auto itr : reuse_extractor.name_val_map){
             reuse_factor *= itr.second;
         }
-        // std::cout << "reg " << cop->name << ", reuse_factor, " << reuse_factor << std::endl;
+        //std::cout<< "reg " << cop->name << ", reuse_factor, " << reuse_factor << std::endl;
         buf_reuse_map[cop->name] = reuse_factor;
 
 
@@ -2422,7 +2421,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           ReuseExtractor reuse_extractor(reg_name_val_map);
           int reuse_factor = 1;
           for (auto vv : p.second) {  // buffer access
-            // std::cout << Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               reuse_extractor.Extract(indx);
             }
@@ -2430,7 +2429,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           for (auto itr : reuse_extractor.name_val_map){
             reuse_factor *= itr.second;
           }
-          // std::cout << "reg " << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
+          //std::cout<< "reg " << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
           buf_reuse_map[p.first->name] = reuse_factor;
         }
       }
@@ -2445,9 +2444,9 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       int loop_extent = std::get<1>(*loop);
       std::unordered_set<std::string> index_set = itr.second;
       if (index_set.find(loop_itr_name) == index_set.end()){
-        // std::cout << "loop itr " << loop_itr_name << std::endl;
+        //std::cout<< "loop itr " << loop_itr_name << std::endl;
         reuse_factor *= loop_extent;
-        // std::cout << "reuse " << std::endl;
+        //std::cout<< "reuse " << std::endl;
       }
       else if (loop_extent == 1){
         continue;
@@ -2456,22 +2455,22 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         break;
       }
     }
-    // std::cout << itr.first << ", reuse_factor, " << reuse_factor << std::endl;
+    //std::cout<< itr.first << ", reuse_factor, " << reuse_factor << std::endl;
     totalReuse += 1.0/float(reuse_factor);
   }
 
 
-  // std::cout << "\n--------------compute sm buffer reuse ---------------------" << std::endl;
+  //std::cout<< "\n--------------compute sm buffer reuse ---------------------" << std::endl;
   for (const auto& op : task->compute_dag->ops) {
     if (auto cop = op.as<te::ComputeOpNode>()) {
-      // std::cout << "------SM alloca ----------" << cop  << std::endl;
+      //std::cout<< "------SM alloca ----------" << cop  << std::endl;
       if (cop->name.find("temp") == std::string::npos) {
         auto ttt = task->compute_dag.operator->()->access_analyzer->read_from.at(op);
         for (auto p : ttt) {
           ReuseExtractor reuse_extractor(sm_name_val_map);
           int reuse_factor = 1;
           for (auto vv : p.second) {  // buffer access
-            // std::cout << Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               reuse_extractor.Extract(indx);
             }
@@ -2479,7 +2478,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           for (auto itr : reuse_extractor.name_val_map){
             reuse_factor *= itr.second;
           }
-          // std::cout << "SM" << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
+          //std::cout<< "SM" << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
         }
       }
     }
@@ -2500,8 +2499,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   // kernel buffer size
   int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry * tb_ff;
-  int bc;
-  // std::cout << "bc " << bc << std::endl;
+  int bc = 0;
+  //std::cout<< "bc " << bc << std::endl;
   // check bank conflict
   if (sm_rc*sm_rx*sm_ry % 32 == 0){
     bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
@@ -2513,9 +2512,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   int ouput_reg = reg_ff * reg_yy * reg_xx;
   OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans_per_tb / 32.0;
 
-  // std::cout << " state : " << state << std::endl; 
-  // std::cout << "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
-  // std::cout << "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
+  //std::cout<< "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
+  //std::cout<< "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
 
   // push back to features, wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global
   features->push_back(wave_efficiency);
@@ -2527,17 +2525,28 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
   
-  // std::cout << "---Feature---" << std::endl;
-  // std::cout << "thread_block_size " << thread_block_size << std::endl;
-  // std::cout << "global_trans " << global_trans << std::endl;
-  // std::cout << "wave_efficiency " << wave_efficiency << std::endl;
-  // std::cout << "est_occupancy " << est_occupancy << std::endl;
-  // std::cout << "ILP " << ILP << std::endl;
-  // std::cout << "WLP " << WLP << std::endl;
-  // std::cout << "Concurrent_estimate " << Concurrent_estimate << std::endl;
-  // std::cout << "totalReuse " << totalReuse << std::endl;
-  // std::cout << "OI_Global " << OI_Global << std::endl;
-  // std::cout << "---Feature End---" << std::endl;
+  //std::cout<< "---Feature---" << std::endl;
+  //std::cout<< "thread_block_size " << thread_block_size << std::endl;
+  //std::cout<< "global_trans " << global_trans << std::endl;
+  //std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
+  //std::cout<< "est_occupancy " << est_occupancy << std::endl;
+  //std::cout<< "ILP " << ILP << std::endl;
+  //std::cout<< "WLP " << WLP << std::endl;
+  //std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
+  //std::cout<< "totalReuse " << totalReuse << std::endl;
+  //std::cout<< "OI_Global " << OI_Global << std::endl;
+
+  //std::cout<< "---Check BC---" << std::endl;
+  // shared_trans_per_tb, shared_trans, total_load_elements, bc, num_TB
+  //std::cout<< "shared_trans " << shared_trans << std::endl;
+  //std::cout<< "shared_trans_per_tb " <<shared_trans_per_tb << std::endl;
+  //std::cout<< "total_load_elements " <<total_load_elements << std::endl;
+  //std::cout<< "num_TB" << num_TB << std::endl;
+  //std::cout<< "bc " << bc << std::endl;
+  //std::cout<< "OI_Shared " << OI_Shared << std::endl;
+  //std::cout<< "= thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / 32 " << thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / 32.0 << std::endl;
+  //std::cout<< "/ shared_trans_per_tb " << shared_trans_per_tb << std::endl;
+  //std::cout<< "---Feature End---" << std::endl;
 
   // TODO: change to 0.67
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
@@ -2634,12 +2643,12 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   int block_dimy = tmp.threadIdx_y_len;
   int block_dimz = tmp.threadIdx_z_len;
 
-  // std::cout << "TBx : " << tmp.blockIdx_x_len << std::endl;
-  // std::cout << "TBx : " << tmp.blockIdx_y_len << std::endl;
-  // std::cout << "TBx : " << tmp.blockIdx_z_len << std::endl;
-  // std::cout << "THx : " << tmp.threadIdx_x_len << std::endl;
-  // std::cout << "THx : " << tmp.threadIdx_y_len << std::endl;
-  // std::cout << "THx : " << tmp.threadIdx_z_len << std::endl;
+  //std::cout<< "TBx : " << tmp.blockIdx_x_len << std::endl;
+  //std::cout<< "TBx : " << tmp.blockIdx_y_len << std::endl;
+  //std::cout<< "TBx : " << tmp.blockIdx_z_len << std::endl;
+  //std::cout<< "THx : " << tmp.threadIdx_x_len << std::endl;
+  //std::cout<< "THx : " << tmp.threadIdx_y_len << std::endl;
+  //std::cout<< "THx : " << tmp.threadIdx_z_len << std::endl;
   int num_TB = grid_dimx * grid_dimy * grid_dimz;
   int num_warp = std::ceil( (float)block_dimx*block_dimy*block_dimz/32);
 
@@ -2650,17 +2659,17 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
 
   //Need to design return
   for (const auto& x : extractor.xbuffer_features){
-    // std::cout << "---- Summary ---" << std::endl;
-    // std::cout << "num_warp : " << num_warp << std::endl;
-    // std::cout << "num_TB : " << num_TB << std::endl;
+    //std::cout<< "---- Summary ---" << std::endl;
+    //std::cout<< "num_warp : " << num_warp << std::endl;
+    //std::cout<< "num_TB : " << num_TB << std::endl;
     const xFeatureSet& fea_set = x.second;
     for (const auto& xacc_fea : fea_set.access_feas) {
-      // std::cout << "Buffer name : " << xacc_fea.buffer_name << std::endl;
-      // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
-      //std::cout << "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
-      // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      //std::cout<< "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      //std::cout<< "Buffer scope : " << xacc_fea.scope << std::endl;
+      ////std::cout<< "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
+      //std::cout<< "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
       int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
-      // std::cout << "Buffer warp trans : " << warp_trans << std::endl;
+      //std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
         // only accumulate shared mem read to shared_trans
@@ -2675,9 +2684,9 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       }
     }
   }
-  // std::cout << "global_trans : " << global_trans << std::endl;
-  // std::cout << "shared_trans : " << shared_trans << std::endl;
-  // std::cout << "local_trans : " << local_trans << std::endl;
+  //std::cout<< "global_trans : " << global_trans << std::endl;
+  //std::cout<< "shared_trans : " << shared_trans << std::endl;
+  //std::cout<< "local_trans : " << local_trans << std::endl;
 
 
 
@@ -2691,9 +2700,9 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   int thread_per_TB = (*res)[2];
   thread_per_TB = std::ceil( (float)thread_per_TB/32) * 32;
 
-  // std::cout << "totalShared (#): " << totalShared << std::endl;
-  // std::cout << "thread_per_TB (#) : " << thread_per_TB << std::endl;
-  // std::cout << "registersUsed_per_thread (#): " << registersUsed_per_thread << std::endl;
+  //std::cout<< "totalShared (#): " << totalShared << std::endl;
+  //std::cout<< "thread_per_TB (#) : " << thread_per_TB << std::endl;
+  //std::cout<< "registersUsed_per_thread (#): " << registersUsed_per_thread << std::endl;
 
   assert (totalShared != 0);
   assert (thread_per_TB != 0);
@@ -2711,22 +2720,22 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
 
   float occupancy = warpsPerSM / (maxWarpsSM * 1.0);
 
-  // std::cout << "global_trans : " << global_trans << std::endl;
-  // std::cout << "shared_trans : " << shared_trans << std::endl;
-  // std::cout << "local_trans : " << local_trans << std::endl;
+  //std::cout<< "global_trans : " << global_trans << std::endl;
+  //std::cout<< "shared_trans : " << shared_trans << std::endl;
+  //std::cout<< "local_trans : " << local_trans << std::endl;
 
-  // std::cout << "max_threads_per_block : " << gpu_params["max_threads_per_block"].as<IntImmNode>()->value << std::endl;
-  // std::cout << "max_shared_memory_per_block : " << gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value << std::endl;
+  //std::cout<< "max_threads_per_block : " << gpu_params["max_threads_per_block"].as<IntImmNode>()->value << std::endl;
+  //std::cout<< "max_shared_memory_per_block : " << gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value << std::endl;
 
-  // std::cout << "thread_per_TB : " << thread_per_TB << std::endl;
-  // std::cout << "totalShared : " << totalShared << std::endl;
-  // std::cout << "registersUsed_per_thread : " << registersUsed_per_thread << std::endl;
+  //std::cout<< "thread_per_TB : " << thread_per_TB << std::endl;
+  //std::cout<< "totalShared : " << totalShared << std::endl;
+  //std::cout<< "registersUsed_per_thread : " << registersUsed_per_thread << std::endl;
 
-  // std::cout << "blocksPerSMWarps : " << blocksPerSMWarps << std::endl;
-  // std::cout << "blocksPerSMSharedMemory : " << blocksPerSMSharedMemory << std::endl;
-  // std::cout << "blocksPerSMReg : " << blocksPerSMReg << std::endl;
+  //std::cout<< "blocksPerSMWarps : " << blocksPerSMWarps << std::endl;
+  //std::cout<< "blocksPerSMSharedMemory : " << blocksPerSMSharedMemory << std::endl;
+  //std::cout<< "blocksPerSMReg : " << blocksPerSMReg << std::endl;
 
-  // std::cout << "T occupancy : " << occupancy << std::endl;
+  //std::cout<< "T occupancy : " << occupancy << std::endl;
   ret->push_back(1);
   ret->push_back(global_trans);
   ret->push_back(shared_trans);
@@ -2736,12 +2745,12 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   // (*ret)[1] = global_trans;
   // (*ret)[2] = shared_trans;
   // (*ret)[3] = occupancy;
-  // std::cout << "ret0 : " << (*ret)[0] << std::endl;
-  // std::cout << "ret1 : " << (*ret)[1] << std::endl;
-  // std::cout << "ret2 : " << (*ret)[2] << std::endl;
-  // std::cout << "ret3 : " << (*ret)[3] << std::endl;
+  //std::cout<< "ret0 : " << (*ret)[0] << std::endl;
+  //std::cout<< "ret1 : " << (*ret)[1] << std::endl;
+  //std::cout<< "ret2 : " << (*ret)[2] << std::endl;
+  //std::cout<< "ret3 : " << (*ret)[3] << std::endl;
 
-  // std::cout << "@@ OuR ret vect size : " << ret->size() << std::endl;
+  //std::cout<< "@@ OuR ret vect size : " << ret->size() << std::endl;
 }
 
 void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, int max_n_bufs,
@@ -2831,7 +2840,6 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
 
     // std::cout << "feature size : " << feature->size() << std::endl;
-    // exit(-1);
     assert(feature->size() == 5);
     float global_trans  = (*feature)[1];
     float shared_trans  = (*feature)[2];
