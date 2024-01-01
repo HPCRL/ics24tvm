@@ -1056,49 +1056,6 @@ void SketchPolicyNode::NodeMove(
   total_inputs->clear();
   total_results->clear();
   State newState = neighbour_table[0][0];
-  // move newstate to each array<state> in next_states
-  // //std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
-  // for (int i = 0; i < next_states.size(); i++) { 
-  //   //std::cout << "[NodeMove]i = " << i << std::endl;
-  //   //std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
-  //   if (!next_states[i]->empty()) {
-  //     // array[0] = std::move(newState);
-  //     // array[0] is const , so pop it then push_back
-  //     next_states[i]->pop_back();
-  //     next_states[i]->push_back(std::move(newState));
-  //     //std::cout << "[NodeMove]array size = " << next_states[i]->size() << std::endl;
-  //   } else {
-  //     next_states[i]->push_back(std::move(newState));
-  //   }
-  // }
-  // //std::cout << "[NodeMove] size of next_states = " << next_states.size() << std::endl;
-  // return ;
-
-  // if (!next_states->empty()) {
-  //     // next_states 不为空，向每个 Array<State> 添加 newState
-  //     //std::cout << "next_states is not empty" << std::endl;
-  //     for (int i = 0; i < next_states->size(); i++) {
-  //         (*next_states)[i].push_back(newState);
-  //     }
-  // } else {
-  //     //std::cout << "next_states is empty" << std::endl;
-  //     // next_states 为空，先添加一个新的 Array<State>
-  //     Array<State> newArray;
-  //     newArray.push_back(newState);
-  //     next_states->push_back(newArray); // 添加 newArray 到 next_states
-  // for (auto& array : *next_states) {
-  //   if (!array.empty()) {
-  //     // array[0] = std::move(newState);
-  //     // array[0] is const , so pop it then push_back
-  //     array.pop_back();
-  //     array.push_back(std::move(newState));
-  //     //std::cout << "[NodeMove]array size = " << array.size() << std::endl;
-  //   } else {
-  //     array.push_back(std::move(newState));
-  //   }
-  // }
-  // //std::cout << "[NodeMove] size of next_states = " << next_states->size() << std::endl;
-  // return;
   Array<State> local_min;
   std::mutex visited_mutex;
 
@@ -1277,43 +1234,43 @@ void SketchPolicyNode::NodeMove(
       const auto state_str = state_to_string(local_path[0], v_splitMeta_info, search_task);
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, local_path[0]);
-      for (int j = 0; j < sampled_topK * 3; j++) {  // mutate more nhop neighbors
+      for (int j = 0; j < sampled_topK * 4; j++) {  // mutate more nhop neighbors
         ConfigKey next_config_key = RandomMutate(current_config, pz_factors, v_splitMeta_info);
         // directly add to tmp_conf_table, will check if it is in visited
         tmp_conf_table[idx_conf_table++] = next_config_key;
       }
 
-      // // sort and get sampled_topK neighbors
-      // Array<State> tmp_sampled_states =
-      //     SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
-      // std::vector<float> tmp_pop_scores_nhop;
-      // tmp_pop_scores_nhop.reserve(tmp_sampled_states.size());
-      // program_cost_model->Predict(search_task, tmp_sampled_states, &tmp_pop_scores_nhop);
-      // std::vector<int> tmp_indices_nhop = Argsort(tmp_pop_scores_nhop);
-      // std::vector<float> pop_scores_nhop;
-      // Array<State> sampled_states;
-      // std::vector<int> indices_nhop;
-      // for (int j = 0; j < sampled_topK; j++) {
-      //   sampled_states.push_back(tmp_sampled_states[tmp_indices_nhop[j]]);
-      //   pop_scores_nhop.push_back(tmp_pop_scores_nhop[tmp_indices_nhop[j]]);
-      //   indices_nhop.push_back(j);
-      // }
-
+      // sort and get sampled_topK neighbors
       Array<State> tmp_sampled_states =
           SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
-          
-      Array<State> sampled_states(tmp_sampled_states.begin(), tmp_sampled_states.begin() + sampled_topK);
+      std::vector<float> tmp_pop_scores_nhop;
+      tmp_pop_scores_nhop.reserve(tmp_sampled_states.size());
+      program_cost_model->Predict(search_task, tmp_sampled_states, &tmp_pop_scores_nhop);
+      std::vector<int> tmp_indices_nhop = Argsort(tmp_pop_scores_nhop);
       std::vector<float> pop_scores_nhop;
-      pop_scores_nhop.reserve(sampled_states.size());
-      program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
-      // sort by pop_scores_nhop and get the top30
-      std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
-      //std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
+      Array<State> sampled_states;
+      std::vector<int> indices_nhop;
+      for (int j = 0; j < sampled_topK && tmp_pop_scores_nhop[tmp_indices_nhop[j]] > 0; j++) {
+        sampled_states.push_back(tmp_sampled_states[tmp_indices_nhop[j]]);
+        pop_scores_nhop.push_back(tmp_pop_scores_nhop[tmp_indices_nhop[j]]);
+        indices_nhop.push_back(j);
+      }
+
+      // Array<State> tmp_sampled_states =
+      //     SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+          
+      // Array<State> sampled_states(tmp_sampled_states.begin(), tmp_sampled_states.begin() + sampled_topK);
+      // std::vector<float> pop_scores_nhop;
+      // pop_scores_nhop.reserve(sampled_states.size());
+      // program_cost_model->Predict(search_task, sampled_states, &pop_scores_nhop);
+      // // sort by pop_scores_nhop and get the top30
+      // std::vector<int> indices_nhop = Argsort(pop_scores_nhop);
+      // //std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
 
       int n_hop_max_idx = 0;
       int n_hop_window_start = 0;
       topn = std::min(sampled_topK, static_cast<int>(sampled_states.size()));
-      //std::cout << "randome jump topn = " << topn << std::endl;
+      // std::cout << "randome jump topn = " << topn << std::endl;
       //std::cout << "idx start from " << n_hop_window_start << " to " << n_hop_window_start + topn << std::endl;
       //std::cout << "size of sampled_states " << sampled_states.size() << std::endl;
       //std::cout << "size of sampled_topK " << sampled_topK << std::endl;
