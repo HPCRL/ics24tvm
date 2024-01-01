@@ -67,7 +67,7 @@ class splitMeta {
        << "\n";
     os << "tile size len " << spm.tile_sizes.size() << "\n";
     os << "[ ";
-    for (auto i = 0; i < spm.tile_sizes.size(); i++) {
+    for (std::vector<int>::size_type i = 0; i < spm.tile_sizes.size(); ++i) {
       os << spm.tile_sizes[i] << ", ";
     }
     os << " ]";

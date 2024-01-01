@@ -18,10 +18,10 @@ namespace auto_scheduler {
 void DataMovementAnalysis::Apply(SketchPolicyNode* policy, State* state) const {
 
     std::cout << "------------ DVA pass --------------" << std::endl;
-    int skip_first_n_feature_extraction = 0;
+    // int skip_first_n_feature_extraction = 0;
 
-    std::vector<std::vector<float>> features;
-    int max_n_bufs = 5;
+    // std::vector<std::vector<float>> features;
+    // int max_n_bufs = 5;
     // Array<State> states;
     // states.push_back(*state);
 

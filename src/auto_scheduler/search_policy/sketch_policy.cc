@@ -222,13 +222,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     ICHECK_GT(best_states.size(), 0);
     return best_states[0];
   } else {
-    int num_random =
-        static_cast<int>(GetDoubleParam(params, SketchParamKey::eps_greedy) * num_measure_per_iter);
     early_stopping = early_stopping < 0 ? std::numeric_limits<int>::max() >> 1 : early_stopping;
     measurer->Reset();
 
     int ct = 0;
-    int empty_retry_count = GetIntParam(params, SketchParamKey::empty_retry_count);
     Array<State> best_states;
     std::vector<Array<State>*> next_states;
     Array<MeasureInput> inputs;
@@ -238,7 +235,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     Array<State> local_min_set, initStatesForModel;
 
     bool firsttime_random = true;
-    int max_num_for_measure = 16;
     num_failed_local_search_ = 0;
     int init_num = 2;
     int model_age = 0;
@@ -371,7 +367,7 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
 void generatePermutations(const std::unordered_map<int, Array<Array<Integer>>>& full_factor_list,
                           std::vector<Array<Integer>>& current_config, int depth,
                           std::map<int, ConfigKey>& conf_table, int& idx) {
-  if (current_config.size() == depth) {
+  if (current_config.size() == size_t(depth)) {
     ConfigKey config_key;
     for (auto& config_value : current_config) {
       for (auto& value : config_value) {
@@ -443,14 +439,14 @@ ConfigKey SketchPolicyNode::map_to_configkey(
     if (spm->parallel == 1) {
       std::vector<int> tile_conf = current_config[spm->origin_itr->name];
       // std::cout << "tile_name " << spm->origin_itr->name << std::endl;
-      for (int i = 0; i < tile_conf.size(); i++) {
+      for (size_t i = 0; i < tile_conf.size(); i++) {
         // std::cout << tile_conf[i] << " ";
         config_key.push_back(tile_conf[i]);
       }
     } else {
       std::vector<int> tile_conf = current_config[spm->origin_itr->name];
       // std::cout << "tile_name " << spm->origin_itr->name << std::endl;
-      for (int i = 0; i < tile_conf.size(); i++) {
+      for (size_t i = 0; i < tile_conf.size(); i++) {
         // std::cout << tile_conf[i] << " ";
         config_key.push_back(tile_conf[i]);
       }
@@ -762,89 +758,6 @@ int containsConfigKey(const std::map<int, ConfigKey>& map, const ConfigKey& keyT
   return 0;
 }
 
-std::map<int, ConfigKey> SketchPolicyNode::GenerateUniquetable(
-    SketchPolicyNode* policy, State state, std::vector<splitMeta*> v_splitMeta_info, ConfigKey base,
-    std::unordered_map<std::string, std::vector<int>> current_config) {
-  std::map<int, ConfigKey> res;
-
-  const State& init_state = policy->search_task->compute_dag->init_state;
-  std::map<int, int> stage_itr_offset;
-
-  for (auto spm : v_splitMeta_info) {
-    int step_id = spm->step_id;
-    // std::cout << "v_splitMeta_info step_id " << step_id  << std::endl;
-    auto ps = state->transform_steps[step_id].as<SplitStepNode>();
-    int orgin_stage_id = ps->stage_id;
-    auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
-    // restore iterator id according to transform steps
-    if (stage_itr_offset.find(orgin_stage_id) != stage_itr_offset.end()) {
-      // accumulate the previous split
-      int offset = stage_itr_offset[orgin_stage_id];
-      spm->origin_itr = ori_iters[ps->iter_id - offset];
-
-      stage_itr_offset[orgin_stage_id] += ps->lengths.size();
-      if (ps->lengths.size() == 4) {
-        spm->parallel = true;
-      } else if (ps->lengths.size() == 2) {
-        spm->parallel = false;
-      } else {
-        assert(false && "unknown itr type");
-      }
-    } else {
-      // first one in the stage
-      spm->origin_itr = ori_iters[ps->iter_id];
-      // Fetch the current tile sizes.
-      stage_itr_offset[orgin_stage_id] = ps->lengths.size();
-      if (ps->lengths.size() == 4) {
-        spm->parallel = true;
-      } else if (ps->lengths.size() == 2) {
-        spm->parallel = false;
-      } else {
-        assert(false && "unknown itr type");
-      }
-    }
-  }
-
-  // std::cout << "Done itr id adjust " << v_splitMeta_info.size() << std::endl;
-  SplitFactorizationMemo sfm;
-  int max_innermost_split_factor =
-      GetIntParam(policy->params, SketchParamKey::max_innermost_split_factor);
-
-  int tiling_level = 2;
-  std::unordered_map<int, Array<Array<Integer>>> full_factor_list;
-  int i = 0;
-  for (auto sm : v_splitMeta_info) {
-    if (sm->parallel) {
-      std::string dim_name = sm->origin_itr->name;
-      // std::cout << "dim_name: " << dim_name << ", i = " << i << std::endl;
-      auto fact_schem =
-          sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
-      full_factor_list[i] = fact_schem;
-      i++;
-    } else {
-      // non-parallel
-      tiling_level = 1;
-      std::string dim_name = sm->origin_itr->name;
-      // std::cout << "dim_name: " << dim_name << ", i = " << i << std::endl;
-      auto fact_schem =
-          sfm.GetFactorizationSchemes(sm->problem_size, tiling_level, max_innermost_split_factor);
-      full_factor_list[i] = fact_schem;
-      i++;
-    }
-  }
-
-  int idx = 0;
-  int depth = i;
-  std::vector<Array<Integer>> current;
-
-  // permutate the base
-
-  // TODO: prune the config table
-  generatePermutations(full_factor_list, current, depth, res, idx);
-
-  return res;
-}
-
 /* Generate direct neighbors states for state
  *  @param states: base states
  *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
@@ -987,7 +900,7 @@ ConfigKey SketchPolicyNode::RandomMutate(
   // up-down mutate for tb or reg, push into the neighbors_config_key
   //  int max_innermost_split_factor = GetIntParam(this->params,
   //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
-  int max_innermost_split_factor = INT_MAX;
+  // int max_innermost_split_factor = INT_MAX;
 
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
   // std::cout << "[RandomMutate]current_config: \n" << std::endl;
@@ -1008,7 +921,7 @@ ConfigKey SketchPolicyNode::RandomMutate(
     // std::cout << "current_config: \n" << std::endl;
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
       auto dim_name = sm->origin_itr->name;
-      auto pz = sm->problem_size;
+      // auto pz = sm->problem_size;
       auto reg = current_config[dim_name][0];
       auto tb = current_config[dim_name][1];
 
@@ -1024,7 +937,7 @@ ConfigKey SketchPolicyNode::RandomMutate(
 
     } else {
       auto dim_name = sm->origin_itr->name;
-      auto pz = sm->problem_size;
+      // auto pz = sm->problem_size;
       auto inner_inner = current_config[dim_name][0];
       // std::cout << "inner_inner: " << inner_inner << std::endl;
 
@@ -1202,7 +1115,7 @@ void SketchPolicyNode::NodeMove(
     vec_pop_scores.push_back(tmp);
   }
 
-  for (int index = 0; index < neighbour_table.size(); index++) {
+  for (size_t index = 0; index < neighbour_table.size(); index++) {
    //std::cout << "[NodeMove]Node index = " << index << std::endl;
     const auto local_path = neighbour_table[index];
     std::vector<float> pop_scores = vec_pop_scores[index];
@@ -1282,7 +1195,7 @@ void SketchPolicyNode::NodeMove(
 
       Array<MeasureResult> tmp_results;
       tmp_results.push_back(best_result);
-      for (int i = 1; i < results.size(); i++){
+      for (size_t i = 1; i < results.size(); i++){
         tmp_results.push_back(results[i]);
       }
       results = tmp_results;
@@ -1290,7 +1203,7 @@ void SketchPolicyNode::NodeMove(
       // get all the gflops for each path
       std::vector<float> gflops_per_path;
       //std::cout << "gflops: ";
-      int iter = 0;
+      // int iter = 0;
       bool has_valid = false;
       for (auto res : results) {
         float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
@@ -1309,7 +1222,7 @@ void SketchPolicyNode::NodeMove(
 
       // find the best gflops in path
       float max_flops = gflops_per_path[0];
-      for (int i = 1; i < gflops_per_path.size(); i++) {
+      for (size_t i = 1; i < gflops_per_path.size(); i++) {
         std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[i]);
         const auto state_str = state_to_string(good_from_predict[i], tmp_meta_info, search_task);
         if (gflops_per_path[i] > max_flops && visited.count(state_str) == 0) {
@@ -1434,7 +1347,7 @@ void SketchPolicyNode::NodeMove(
 
         Array<MeasureResult> tmp_results;
         tmp_results.push_back(best_result);
-        for (int i = 1; i < results.size(); i++){
+        for (size_t i = 1; i < results.size(); i++){
           tmp_results.push_back(results[i]);
         }
         results = tmp_results;
@@ -1442,7 +1355,7 @@ void SketchPolicyNode::NodeMove(
         // get all the gflops for each path
         std::vector<float> gflops_per_path;
         //std::cout << "random nhop neighbors' gflops: ";
-        int iter = 0;
+        // int iter = 0;
         bool has_valid = false;
         for (auto res : results) {
           float flops = search_task->compute_dag->flop_ct / FloatArrayMean(res->costs);
@@ -1461,7 +1374,7 @@ void SketchPolicyNode::NodeMove(
 
         // find the best gflops in path
         float max_flops = gflops_per_path[0];
-        for (int i = 1; i < gflops_per_path.size(); i++) {
+        for (size_t i = 1; i < gflops_per_path.size(); i++) {
           std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[i]);
           const auto state_str = state_to_string(good_from_predict[i], tmp_meta_info, search_task);
           if (gflops_per_path[i] > max_flops && visited.count(state_str) == 0) {
@@ -1552,22 +1465,11 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
 
   // std::cout << "Done itr id adjust " << v_splitMeta_info.size() << std::endl;
   SplitFactorizationMemo sfm;
-  int max_innermost_split_factor =
-      GetIntParam(policy->params, SketchParamKey::max_innermost_split_factor);
-
-  // get factor list for each dimension using GetFactorizationSchemes
-
   // get factor list for each dimension
   for (auto sm : v_splitMeta_info) {
     if (sm->parallel) {
       auto dim_name = sm->origin_itr->name;
-      // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 2,
-      // max_innermost_split_factor);
       auto fact_schem = sfm.GetFactors(sm->problem_size);
-      // std::cout << "fact_schem size " << fact_schem.size() << std::endl;
-      // for (auto f : fact_schem){
-      //   std::cout << f << " ";
-      // }
       std::vector<int> v_fact_schem;
       for (auto f : fact_schem) {
         v_fact_schem.push_back(f);
@@ -1575,13 +1477,7 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
       res[dim_name] = v_fact_schem;
     } else {
       auto dim_name = sm->origin_itr->name;
-      // auto fact_schem = sfm.GetFactorizationSchemes(sm->problem_size, 1,
-      // max_innermost_split_factor);
       auto fact_schem = sfm.GetFactors(sm->problem_size);
-      // std::cout << "fact_schem size " << fact_schem.size() << std::endl;
-      // for (auto f : fact_schem){
-      //   std::cout << f << " ";
-      // }
       std::vector<int> v_fact_schem;
       for (auto f : fact_schem) {
         v_fact_schem.push_back(f);
@@ -1596,8 +1492,8 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetFactorInf
 std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
   std::unordered_set<int> sm_ts;
   int Npz = *std::max_element(reg_tile_factors.begin(), reg_tile_factors.end());
-  for (int i = 0; i < reg_tile_factors.size(); i++){
-    for (int j = i; j < reg_tile_factors.size(); j++){
+  for (size_t i = 0; i < reg_tile_factors.size(); i++){
+    for (size_t j = i; j < reg_tile_factors.size(); j++){
       if (reg_tile_factors[i]*reg_tile_factors[j] <= Npz && Npz % (reg_tile_factors[i]*reg_tile_factors[j]) == 0) // gaurantee no partial tile
         sm_ts.insert(reg_tile_factors[i]*reg_tile_factors[j]);
     }
@@ -1644,7 +1540,7 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
   // PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
-  int idx = 0;
+  // int idx = 0;
   // std::cout << "size of next_states " << next_states->size() << std::endl;
   // for (auto next : *next_states) {
   //   if (next.empty()) {
@@ -1879,14 +1775,10 @@ bool SketchPolicyNode::cuda_view(const State& state,
     if (spm->parallel == 1) {  // filter tb size for parallel dims
       int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
       int tb = spm->tile_sizes[2];
-      int grid = spm->tile_sizes[0];
       totalReg *= reg;
       total_tb_size *= tb;
       // (Chendi)further prune?
     } else {  // and filter inner_outer for reduce dims
-      int outer_SM = spm->tile_sizes[0];
-      int inner_outer = spm->tile_sizes[1];
-      int inner_inner = spm->tile_sizes[2];
       // (Chendi)further prune?
     }
   }
@@ -2486,7 +2378,7 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
   size_t offset_best_upperbound = 0;
   size_t offset_best = 0;
   // constrcut all state until no more than remaining_n_trials
-  if (best_states.size() > remaining_n_trials) {
+  if (best_states.size() > size_t(remaining_n_trials)) {
     offset_best_upperbound = remaining_n_trials;
   } else {
     offset_best_upperbound = best_states.size();
@@ -2522,7 +2414,7 @@ Array<MeasureInput> SketchPolicyNode::PackState(const Array<State>& best_states,
   size_t offset_best_upperbound = 0;
   size_t offset_best = 0;
   // constrcut all state until no more than remaining_n_trials
-  if (best_states.size() > remaining_n_trials) {
+  if (best_states.size() > size_t(remaining_n_trials)) {
     offset_best_upperbound = remaining_n_trials;
   } else {
     offset_best_upperbound = best_states.size();

@@ -2061,6 +2061,11 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   int pz_rc, pz_rx, pz_ry, pz_ff, pz_xx, pz_yy;
   int tb_xx, tb_yy, tb_ff;
 
+  reg_ff = reg_xx = reg_yy = 0;
+  sm_rx = sm_ry = sm_rc = 0;
+  tb_xx = tb_yy = tb_ff = 0;
+  pz_rc = pz_rx = pz_ry = pz_ff = pz_xx = pz_yy = 0;
+
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
       // std::cout << " name=" << spm->origin_itr->name 
@@ -2115,7 +2120,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
       int sm_reduction = spm->tile_sizes[1] * spm->tile_sizes[2];
       int pz = spm->problem_size;
-      int outer_sm = pz/sm_reduction;
+      // int outer_sm = pz/sm_reduction;
       // outer sm smaller than sm need
       // if (outer_sm > sm_reduction){
       //   return std::make_tuple(-1, -1, -1, -1);
@@ -2150,6 +2155,23 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       continue;
     }
     // std::cout << "end-----------------------------------" << std::endl;
+  }
+
+  // check if all the reg/tb/sm are not zero
+  for (auto itr : parallel_data_map ){
+    if (itr.second.reg == 0 || itr.second.tb == 0 || itr.second.pz == 0){
+      std::cout << "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
+    }
+  }
+  for (auto itr : true_reduction_data_map ){
+    if (itr.second.sm == 0 || itr.second.pz == 0){
+      std::cout << "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+    }
+  }
+  for (auto itr : stencil_reduction_data_map ){
+    if (itr.second.sm == 0 || itr.second.pz == 0){
+      std::cout << "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+    }
   }
 
   // std::cout << "heuristic pruning-----------------------------------" << std::endl;
@@ -2221,7 +2243,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       if (cop->name.find("temp") == std::string::npos) {
         // output
         Array<PrimExpr> output_index;
-        for (auto i = 0; i < cop->axis.size(); i++) {
+        for (size_t i = 0; i < cop->axis.size(); i++) {
           output_index.push_back(PrimExpr(cop->axis[i].get()->var));
         }
         for (auto indx : output_index) {

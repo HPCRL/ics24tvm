@@ -541,9 +541,6 @@ PopulationGenerationRule::ResultKind InitFillTileSize::Apply(SketchPolicyNode* p
 PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(SketchPolicyNode* policy, State* state, ConfigKey tile_config, std::vector<int> split_id) {
   ////std::cout<< "InitFillTileSizeUnique::Apply_unique function---> " << std::endl;
   StateNode* pstate = state->CopyOnWrite();
-  for(int i = 0; i < tile_config.size(); i++){
-    //std::cout << tile_config[i] << " ";
-  }
   int i = 0;
   for (auto step_id : split_id){
     ////std::cout << "step_id: " << step_id << " i " << i << std::endl;
