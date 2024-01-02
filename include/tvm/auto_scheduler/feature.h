@@ -75,7 +75,14 @@ class splitMeta {
   }
 };
 
-  std::tuple<int, int, float, float> extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features);
+struct TDx_access_info 
+{
+  std::string buffer_name;
+  int buffer_touch_size;
+  std::map<std::string, int> local_threadx_val_map;
+};
+
+std::tuple<int, int, float, float> extract_features(const SearchTask& task, State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features, std::vector<TDx_access_info> access_striding_info);
 
 
 /*!
@@ -92,7 +99,7 @@ void GetPerStoreFeature(const PrimFunc& func, int cache_line_size, int max_n_buf
 void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_bufs,
                         std::vector<float>* ret, 
                         std::vector<size_t>* res,
-                        tvm::Map<String, tvm::PrimExpr> gpu_params,  bool log_scale = true);
+                        tvm::Map<String, tvm::PrimExpr> gpu_params, std::vector<TDx_access_info>* access_striding_info, bool log_scale = true);
 /*
  * \brief Get the names of elements in the feature vector. Use this for debug and inspection.
  * \param max_n_bufs The maximum number of extracted buffers for one statement

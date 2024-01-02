@@ -95,6 +95,7 @@ struct xBufferAccessFeature {
   std::string scope;
   int64_t touch_size; 
   int vector_len;
+  std::vector<std::vector<PrimExpr>> indices;
 };
 
 
@@ -591,6 +592,47 @@ std::tuple<ReuseType, float, float, float> ComputeReuse(
   return std::make_tuple(ReuseType::kNoReuse, 0, 0, 0);
 }
 
+std::map<std::string, int> Global_threadx_val_map;
+class BCExtractor : public StmtExprVisitor {
+ public:
+  //BCExtractor() {}
+
+  void Extract(const PrimExpr expr) { return this->VisitExpr(expr); }
+
+  void VisitExpr_(const FloorDivNode* op) final {
+    //std::cout << " Div lefg node "<< op->a  << std::endl;
+    if (op->a.as<VarNode>()){
+      const VarNode* var_op = op->a.as<VarNode>();
+      //std::cout << "var" << var_op->name_hint << std::endl;
+      //std::cout << "right node "<< op->b << std::endl;
+      if (op->b->dtype.is_int()){
+        const IntImmNode* int_op = op->b.as<IntImmNode>();
+        //std::cout << "int" << int_op->value << std::endl;
+        Global_threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+      }
+    }
+
+
+  }
+  void VisitExpr_(const FloorModNode* op) final {
+    // std::cout << " Mod lefg node "<< op->a  << std::endl;
+    if (op->a.as<VarNode>()){
+      const VarNode* var_op = op->a.as<VarNode>();
+      //std::cout << "var" << var_op->name_hint << std::endl;
+      //std::cout << "right node "<< op->b << std::endl;
+      if (op->b->dtype.is_int()){
+        const IntImmNode* int_op = op->b.as<IntImmNode>();
+        //std::cout << "int" << int_op->value << std::endl;
+        Global_threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+      }
+    }
+
+
+
+
+  }
+};
+
 // Extract features for every BufferStore statement
 //
 // This visitor assumes that loop bounds do no depend on data or on parent loop
@@ -953,6 +995,7 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
       xacc_fea.acc_type = acc.acc_type;
       xacc_fea.touch_size = (*buffer_touch_map)[t];
       xacc_fea.vector_len = (buffer_vect_len == -1 ? 1 : buffer_vect_len);
+      xacc_fea.indices = acc.indices;
     }
     //Per Stmt --> List of each buffer info
     //std::cout << "???? xacc_feas size " << xacc_feas.size() << std::endl;
@@ -1830,9 +1873,8 @@ int shift_step(int total_load_elements, int step_len)
 }
 
 // for kernel side bc, total_load_elements = volume of the kernel sm buffer
-int kernel_bc_additional(int Tbx, int Tby, int total_load_elements)
+int approxi_bc_additional(int step_len, int total_load_elements)
 {
-    int step_len = Tbx * Tby;
     if (step_len % 32 == 0)
         return 0;   // if all elements load the same val, boardcasting, no bankconflict
     if (step_len > 32)
@@ -1841,7 +1883,8 @@ int kernel_bc_additional(int Tbx, int Tby, int total_load_elements)
         return shift_step(total_load_elements, step_len);
 }
 
-std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, std::vector<float> *features, int num_sm, int maxDynamicSharedMemorySize) {
+std::tuple<int, int, float, float> extract_features(const SearchTask& task, const State& state, std::vector<splitMeta*> v_splitMeta_info, 
+                                                    std::vector<float> *features, int num_sm, int maxDynamicSharedMemorySize, std::vector<TDx_access_info> access_striding_info) {
   std::map<std::string, ParallelDataStruct> parallel_data_map;
   std::map<std::string, TrueReductionData> true_reduction_data_map;
   std::map<std::string, StencilReductionData> stencil_reduction_data_map;
@@ -2156,6 +2199,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     }
     //std::cout<< "end-----------------------------------" << std::endl;
   }
+  int outer_time_serial_factor = (pz_rc / sm_rc) * (pz_rx / sm_rx) * (pz_ry / sm_ry);
 
   // check if all the reg/tb/sm are not zero
   for (auto itr : parallel_data_map ){
@@ -2496,21 +2540,58 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   WLP = std::min(WLP_SM, WLP_REG);
   Concurrent_estimate = WLP*ILP;
   OI_Global = computeOI_Global(global_trans, parallel_data_map, true_reduction_data_map, stencil_reduction_data_map);
+  
+  // std::cout << "access_striding_info  " << access_striding_info.size() << std::endl;
+  int additional_bc = 0;
+  for (TDx_access_info itr : access_striding_info){
+    // std::cout << itr.buffer_name << std::endl;
+    if (itr.local_threadx_val_map.size() == 0){
+      // std::cout << "WARNING! no local threadx in the buffer, boardcasting"  << std::endl;
+    }
+    else{
+      if (itr.buffer_name.find("temp") != std::string::npos){
+        // std::cout << "temp buffer adj" << std::endl;
+        // int total_load_elements = itr.buffer_touch_size/outer_time_serial_factor;
+        // if (itr.local_threadx_val_map["mod_threadIdx.x"] <  32){
+        //   int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
+        //   additional_bc += approxi_bc_additional(step_len, total_load_elements);
+        // }
+      }
+      else if (itr.buffer_name.find("kernel") != std::string::npos){
+        // std::cout << "kernel buffer adj" << std::endl;
+        int total_load_elements = itr.buffer_touch_size/outer_time_serial_factor;
+        int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
 
-  // kernel buffer size
-  int total_load_elements = reg_ff * sm_rc * sm_rx * sm_ry * tb_ff;
-  int bc = 0;
-  //std::cout<< "bc " << bc << std::endl;
-  // check bank conflict
-  if (sm_rc*sm_rx*sm_ry % 32 == 0){
-    bc = kernel_bc_additional(tb_xx, tb_yy, total_load_elements);
-    shared_trans_per_tb += bc;
+        // for (auto el : itr.local_threadx_val_map){
+        //   std::cout << el.first << " " << el.second << std::endl;
+        // }
+        if (sm_rc*sm_rx*sm_ry*reg_ff % 32 == 0){   //TODO:: very ah hoc; make general
+          additional_bc += approxi_bc_additional(step_len, total_load_elements);
+
+        }
+      }
+    }
   }
+
+  additional_bc *= outer_time_serial_factor;
+
+  float adj_shared_trans_per_tb = shared_trans_per_tb+additional_bc;
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
   // output: nn * ff * yy * xx
   int ouput_reg = reg_ff * reg_yy * reg_xx;
-  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / shared_trans_per_tb / 32.0;
+  OI_Shared = thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / adj_shared_trans_per_tb / 32.0;
+  
+  // std::cout<< "\n---Check BC---" << std::endl;
+  // std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
+  // std::cout<< "OI_Shared : " << OI_Shared << std::endl;
+  // std::cout<< "BankConflict : " << additional_bc << std::endl;
+  // std::cout<< "OI_Shared_ops : " << thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 << std::endl;
+  // std::cout<< "original shared_trans_per_tb : " <<shared_trans_per_tb << std::endl;
+  // std::cout<< "adjusted shared_trans_per_tb : " <<adj_shared_trans_per_tb << std::endl;
+  // std::cout<< "num_TB : " << num_TB << std::endl;
+  // std::cout<< "adjusted total_shared : " << adj_shared_trans_per_tb * num_TB << std::endl;
+  // std::cout<< "---Check BC End---\n" << std::endl;
 
   //std::cout<< "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
   //std::cout<< "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
@@ -2525,28 +2606,16 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
   
-  //std::cout<< "---Feature---" << std::endl;
-  //std::cout<< "thread_block_size " << thread_block_size << std::endl;
-  //std::cout<< "global_trans " << global_trans << std::endl;
-  //std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
-  //std::cout<< "est_occupancy " << est_occupancy << std::endl;
-  //std::cout<< "ILP " << ILP << std::endl;
-  //std::cout<< "WLP " << WLP << std::endl;
-  //std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
-  //std::cout<< "totalReuse " << totalReuse << std::endl;
-  //std::cout<< "OI_Global " << OI_Global << std::endl;
-
-  //std::cout<< "---Check BC---" << std::endl;
-  // shared_trans_per_tb, shared_trans, total_load_elements, bc, num_TB
-  //std::cout<< "shared_trans " << shared_trans << std::endl;
-  //std::cout<< "shared_trans_per_tb " <<shared_trans_per_tb << std::endl;
-  //std::cout<< "total_load_elements " <<total_load_elements << std::endl;
-  //std::cout<< "num_TB" << num_TB << std::endl;
-  //std::cout<< "bc " << bc << std::endl;
-  //std::cout<< "OI_Shared " << OI_Shared << std::endl;
-  //std::cout<< "= thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / 32 " << thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 / 32.0 << std::endl;
-  //std::cout<< "/ shared_trans_per_tb " << shared_trans_per_tb << std::endl;
-  //std::cout<< "---Feature End---" << std::endl;
+  // std::cout<< "---Feature---" << std::endl;
+  // std::cout<< "thread_block_size " << thread_block_size << std::endl;
+  // std::cout<< "global_trans " << global_trans << std::endl;
+  // std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
+  // std::cout<< "est_occupancy " << est_occupancy << std::endl;
+  // std::cout<< "ILP " << ILP << std::endl;
+  // std::cout<< "WLP " << WLP << std::endl;
+  // std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
+  // std::cout<< "totalReuse " << totalReuse << std::endl;
+  // std::cout<< "OI_Global " << OI_Global << std::endl;
 
   // TODO: change to 0.67
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
@@ -2632,7 +2701,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_bufs,
                         std::vector<float>* ret, 
                         std::vector<size_t>* res,
-                        tvm::Map<String, tvm::PrimExpr> gpu_params, bool log_scale) {
+                        tvm::Map<String, tvm::PrimExpr> gpu_params,
+                        std::vector<TDx_access_info>* access_striding_info, bool log_scale) {
   PerStoreFeatureExtractor extractor(cache_line_size, func->buffer_map);
   extractor(func->body);
   const FeatureSet& tmp = extractor.buffer_features.begin()->second;
@@ -2679,6 +2749,30 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
         } else if (xacc_fea.buffer_name.find("kernel") != std::string::npos){
             shared_trans_kernel += warp_trans;
         }
+        BCExtractor bc_extractor;
+        // std::cout << "Buffer indices : " << std::endl;
+        for (const auto& x : xacc_fea.indices) {
+          for (const auto& y : x) {
+            // std::cout << y << std::endl;
+            bc_extractor.Extract(y);
+          }
+        }
+
+       
+        std::map<std::string, int> threadx_val_map;
+
+        for (const auto& x : Global_threadx_val_map){
+          // std::cout << "threadx_val_map : " << x.first << " " << x.second << std::endl;
+          threadx_val_map[x.first] = x.second;
+        }
+        Global_threadx_val_map.clear();
+
+        TDx_access_info tdx_acc_info;
+        tdx_acc_info.buffer_name = xacc_fea.buffer_name;
+        tdx_acc_info.buffer_touch_size = xacc_fea.touch_size;
+        tdx_acc_info.local_threadx_val_map = threadx_val_map;
+
+        access_striding_info->push_back(tdx_acc_info);
         // only accumulate shared mem read to shared_trans
         shared_trans += warp_trans;
       }
@@ -2846,8 +2940,19 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
     // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
-    GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params);
+    std::vector<TDx_access_info> access_striding_info;
+    GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params, &access_striding_info);
 
+    // check the access_striding_info
+    // std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+    // for (auto tdx_acc_info : access_striding_info){
+    //   std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+    //   std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+    //   for (auto itr : tdx_acc_info.local_threadx_val_map){
+    //     std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+    //   }
+    // }
+    
     // std::cout << "feature size : " << feature->size() << std::endl;
     // assert(feature->size() == 5);
     float global_trans  = (*feature)[1];
@@ -2884,7 +2989,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     int a, b, c, d;
     int num_sm = task->hardware_params->num_cores;
     int maxDynamicSharedMemorySize = task->hardware_params->max_shared_memory_per_block / 4; // bytes
-    std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize);
+    std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize, access_striding_info);
     if (a==-1){
       features_extracted.clear();
       for (int i = 0; i < 7; i++){
