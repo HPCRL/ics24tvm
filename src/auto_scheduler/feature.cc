@@ -592,8 +592,10 @@ std::tuple<ReuseType, float, float, float> ComputeReuse(
   return std::make_tuple(ReuseType::kNoReuse, 0, 0, 0);
 }
 
-std::map<std::string, int> Global_threadx_val_map;
+// std::map<std::string, int> Global_threadx_val_map;
 class BCExtractor : public StmtExprVisitor {
+ private:
+  std::map<std::string, int> threadx_val_map;
  public:
   //BCExtractor() {}
 
@@ -608,7 +610,7 @@ class BCExtractor : public StmtExprVisitor {
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
         //std::cout << "int" << int_op->value << std::endl;
-        Global_threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+        threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
       }
     }
 
@@ -623,14 +625,11 @@ class BCExtractor : public StmtExprVisitor {
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
         //std::cout << "int" << int_op->value << std::endl;
-        Global_threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+        threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
       }
     }
-
-
-
-
   }
+  const std::map<std::string, int>& GetThreadxValMap() const { return threadx_val_map; }
 };
 
 // Extract features for every BufferStore statement
@@ -2593,8 +2592,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout<< "adjusted total_shared : " << adj_shared_trans_per_tb * num_TB << std::endl;
   // std::cout<< "---Check BC End---\n" << std::endl;
 
-  //std::cout<< "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
-  //std::cout<< "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
+  // std::cout<< "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
+  // std::cout<< "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
 
   // push back to features, wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global
   features->push_back(wave_efficiency);
@@ -2616,6 +2615,8 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
   // std::cout<< "totalReuse " << totalReuse << std::endl;
   // std::cout<< "OI_Global " << OI_Global << std::endl;
+  // std::cout<< "OI_Shared " << OI_Shared << std::endl;
+  // std::cout<< "---Feature End---\n" << std::endl;
 
   // TODO: change to 0.67
   // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
@@ -2736,12 +2737,12 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
     //std::cout<< "num_TB : " << num_TB << std::endl;
     const xFeatureSet& fea_set = x.second;
     for (const auto& xacc_fea : fea_set.access_feas) {
-      //std::cout<< "Buffer name : " << xacc_fea.buffer_name << std::endl;
-      //std::cout<< "Buffer scope : " << xacc_fea.scope << std::endl;
-      ////std::cout<< "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
-      //std::cout<< "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      // std::cout<< "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      // std::cout<< "Buffer scope : " << xacc_fea.scope << std::endl;
+      // std::cout<< "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
+      // std::cout<< "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
       int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
-      //std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
+      // std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
         if (xacc_fea.buffer_name.find("pad_temp") != std::string::npos){
@@ -2759,13 +2760,13 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
         }
 
        
-        std::map<std::string, int> threadx_val_map;
+        std::map<std::string, int> threadx_val_map = bc_extractor.GetThreadxValMap();
 
-        for (const auto& x : Global_threadx_val_map){
+        for (const auto& x : threadx_val_map){
           // std::cout << "threadx_val_map : " << x.first << " " << x.second << std::endl;
           threadx_val_map[x.first] = x.second;
         }
-        Global_threadx_val_map.clear();
+        threadx_val_map.clear();
 
         TDx_access_info tdx_acc_info;
         tdx_acc_info.buffer_name = xacc_fea.buffer_name;
@@ -2940,59 +2941,71 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
     // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
-    std::vector<TDx_access_info> access_striding_info;
-    GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature, &res, gpu_params, &access_striding_info);
-
-    // check the access_striding_info
-    // std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
-    // for (auto tdx_acc_info : access_striding_info){
-    //   std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-    //   std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
-    //   for (auto itr : tdx_acc_info.local_threadx_val_map){
-    //     std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
-    //   }
-    // }
-    
-    // std::cout << "feature size : " << feature->size() << std::endl;
-    // assert(feature->size() == 5);
-    float global_trans  = (*feature)[1];
-    float shared_trans  = (*feature)[2];
-    float est_occupancy = (*feature)[3];
-    int num_TB          = (*feature)[4];
-    long long shared_trans_input  = (*feature)[5];
-    long long shared_trans_kernel  = (*feature)[6];
-
-    // std::cout << "global_trans: "   << global_trans   << std::endl;
-    // std::cout << "shared_trans: "   << shared_trans   << std::endl;
-    // std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
-
-    // TODO(Chendi): add more features for XGB
-    // features tuple: ['wave_efficiency', 'est_occupancy', 'ILP', 'WLP, 'Concurrent_estimate', 'totalReuse', 'OI_Global'].
-    
-    // std::cout << "state " << state << std::endl;
-
-    std::vector<float> features_extracted;
-    features_extracted.reserve(7);
-    features_extracted.push_back(global_trans);
-    features_extracted.push_back(est_occupancy);
-    features_extracted.push_back(shared_trans);
-    features_extracted.push_back(num_TB);
-    
-    // std::cout << "read_shared_trans_input : " << shared_trans_input << std::endl;
-    // std::cout << "read_shared_trans_kenel : " << shared_trans_kernel << std::endl;
-    // std::cout << "total_read_shared_trans : " << shared_trans << std::endl;
-
-
-    std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
-
-    // valid tuple create for prune
     int a, b, c, d;
-    int num_sm = task->hardware_params->num_cores;
-    int maxDynamicSharedMemorySize = task->hardware_params->max_shared_memory_per_block / 4; // bytes
-    std::tie(a, b, c, d) = extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm, maxDynamicSharedMemorySize, access_striding_info);
-    if (a==-1){
+    std::vector<float> features_extracted;
+    try {
+      std::vector<TDx_access_info> access_striding_info;
+      access_striding_info.reserve(10);
+      GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature,
+                            &res, gpu_params, &access_striding_info);
+
+      // // check the access_striding_info
+      // std::cout << "check the access_striding_info" << std::endl;
+      // std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+      // for (auto tdx_acc_info : access_striding_info){
+      //   std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+      //   std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+      //   for (auto itr : tdx_acc_info.local_threadx_val_map){
+      //     std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+      //   }
+      // }
+
+      // std::cout << "feature size : " << feature->size() << std::endl;
+      // assert(feature->size() == 5);
+      float global_trans = (*feature)[1];
+      float shared_trans = (*feature)[2];
+      float est_occupancy = (*feature)[3];
+      int num_TB = (*feature)[4];
+      long long shared_trans_input = (*feature)[5];
+      long long shared_trans_kernel = (*feature)[6];
+
+      // std::cout << "global_trans: "   << global_trans   << std::endl;
+      // std::cout << "shared_trans: "   << shared_trans   << std::endl;
+      // std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
+
+      // TODO(Chendi): add more features for XGB
+      // features tuple: ['wave_efficiency', 'est_occupancy', 'ILP', 'WLP, 'Concurrent_estimate',
+      // 'totalReuse', 'OI_Global'].
+
+      // std::cout << "state " << state << std::endl;
+
+      features_extracted.reserve(7);
+      features_extracted.push_back(global_trans);
+      features_extracted.push_back(est_occupancy);
+      features_extracted.push_back(shared_trans);
+      features_extracted.push_back(num_TB);
+
+      // std::cout << "read_shared_trans_input : " << shared_trans_input << std::endl;
+      // std::cout << "read_shared_trans_kenel : " << shared_trans_kernel << std::endl;
+      // std::cout << "total_read_shared_trans : " << shared_trans << std::endl;
+
+      std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
+
+      // valid tuple create for prune
+      int num_sm = task->hardware_params->num_cores;
+      int maxDynamicSharedMemorySize =
+          task->hardware_params->max_shared_memory_per_block / 4;  // bytes
+      std::tie(a, b, c, d) =
+          extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm,
+                           maxDynamicSharedMemorySize, access_striding_info);
+      access_striding_info.clear();
+    } catch (Error& e) {
+      a = -1;
+      (*error_ct)++;
+    }
+    if (a == -1) {
       features_extracted.clear();
-      for (int i = 0; i < 7; i++){
+      for (int i = 0; i < 7; i++) {
         features_extracted.push_back(0);
       }
     }
