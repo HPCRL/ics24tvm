@@ -2674,7 +2674,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       //std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
-        if (xacc_fea.buffer_name.find("input") != std::string::npos){
+        if (xacc_fea.buffer_name.find("pad_temp") != std::string::npos){
             shared_trans_input += warp_trans;
         } else if (xacc_fea.buffer_name.find("kernel") != std::string::npos){
             shared_trans_kernel += warp_trans;
