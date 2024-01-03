@@ -2943,6 +2943,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
     int a, b, c, d;
     std::vector<float> features_extracted;
+    int feature_size = 7;
     try {
       std::vector<TDx_access_info> access_striding_info;
       access_striding_info.reserve(10);
@@ -2979,7 +2980,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
 
       // std::cout << "state " << state << std::endl;
 
-      features_extracted.reserve(7);
+      features_extracted.reserve(feature_size);
       features_extracted.push_back(global_trans);
       features_extracted.push_back(est_occupancy);
       features_extracted.push_back(shared_trans);
@@ -3005,7 +3006,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     }
     if (a == -1) {
       features_extracted.clear();
-      for (int i = 0; i < 7; i++) {
+      for (int i = 0; i < feature_size; i++) {
         features_extracted.push_back(0);
       }
     }
