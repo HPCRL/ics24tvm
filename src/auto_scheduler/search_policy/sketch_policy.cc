@@ -216,80 +216,74 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
                                ProgramMeasurer measurer) {
   num_measure_per_iter_ = num_measure_per_iter;
 
-  if (n_trials <= 1) {
-    // No measurement is allowed
-    const Array<State>& best_states = SearchOneRound(0);
-    ICHECK_GT(best_states.size(), 0);
-    return best_states[0];
-  } else {
-    early_stopping = early_stopping < 0 ? std::numeric_limits<int>::max() >> 1 : early_stopping;
-    measurer->Reset();
+  early_stopping = early_stopping < 0 ? std::numeric_limits<int>::max() >> 1 : early_stopping;
+  measurer->Reset();
 
-    int ct = 0;
-    Array<State> best_states;
-    std::vector<Array<State>*> next_states;
-    Array<MeasureInput> inputs;
-    Array<MeasureResult> results;
-    Array<State> local_min_best_states, track_path;
-    // record all local min states
-    Array<State> local_min_set, initStatesForModel;
+  int ct = 0;
+  Array<State> best_states;
+  std::vector<Array<State>*> next_states;
+  Array<MeasureInput> inputs;
+  Array<MeasureResult> results;
+  Array<State> local_min_best_states, track_path;
+  // record all local min states
+  Array<State> local_min_set, initStatesForModel;
 
-    bool firsttime_random = true;
-    num_failed_local_search_ = 0;
-    int init_num = 2;
-    int model_age = 0;
-    count_sampled = 0;
+  bool firsttime_random = true;
+  num_failed_local_search_ = 0;
+  int init_num = 1;  // num of batch size
+  int model_age = 0;
+  count_sampled = 0;
 
-    // generate a model based on random sampling and measure them
-    if (ct == 0) {  // just run it at the first time
-      if (sketch_cache_.empty()) {
-        sketch_cache_ = GenerateSketches();
-      }
-      initStatesForModel = SampleInitPopulation(sketch_cache_);
-      initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
-      // sample to update the model
-      inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
-
-      if (!inputs.empty()) {
-        // use xMeasure to avoid write into the json log
-        results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
-
-        auto t_begin = std::chrono::high_resolution_clock::now();
-
-        // Retrain the cost model before the next search round
-        PrintTitle("Model trained for the neighbor search", verbose);
-        program_cost_model->Update(inputs, results);
-        model_age += 1;
-
-        PrintTimeElapsed(t_begin, "training", verbose);
-      }
+  // generate a model based on random sampling and measure them
+  if (ct == 0) {  // just run it at the first time
+    if (sketch_cache_.empty()) {
+      sketch_cache_ = GenerateSketches();
     }
-    
-    for (int i = 0; i < init_num; i++) {
-      next_states.push_back(new Array<State>());
+    initStatesForModel = SampleInitPopulation(sketch_cache_);
+    initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
+    // sample to update the model
+    inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
+
+    if (!inputs.empty()) {
+      // use xMeasure to avoid write into the json log
+      results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
+
+      auto t_begin = std::chrono::high_resolution_clock::now();
+
+      // Retrain the cost model before the next search round
+      PrintTitle("Model trained for the neighbor search", verbose);
+      program_cost_model->Update(inputs, results);
+      model_age += 1;
+
+      PrintTimeElapsed(t_begin, "training", verbose);
     }
-    while (measured_states_throughputs_.size() < 3000) {
-      // // init next_states
-      // create new predict based search
-      SearchOneRoundPruePredict(init_num, measurer, next_states, firsttime_random, &model_age);
-      // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
-      // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
-      // std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
-      //           << std::endl;
-      // std::cout << "Num of sampled: #" << count_sampled << std::endl;
-                
-      // TODO: if sample more than 32, break
-      if (count_sampled >= 2+init_num) {
-        break;
-      }
-
-    }  // End of while loop
-
-    PrintTitle("Done", verbose);
-
-    // think return state;
-    return measurer->best_state[search_task->workload_key];
   }
+
+  for (int i = 0; i < init_num; i++) {
+    next_states.push_back(new Array<State>());
+  }
+  while (measured_states_throughputs_.size() < 3000) {
+    // // init next_states
+    // create new predict based search
+    SearchOneRoundPruePredict(init_num, n_trials, measurer, next_states, firsttime_random,
+                              &model_age);
+    // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
+    // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
+    // std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
+    //           << std::endl;
+    std::cout << "Num of sampled: #" << count_sampled << std::endl;
+
+    // TODO: if count_sampled hit end codition
+    if (count_sampled == -1) {
+      break;
+    }
+
+  }  // End of while loop
+
+  PrintTitle("Done", verbose);
+
+  // think return state;
+  return measurer->best_state[search_task->workload_key];
 }
 
 std::pair<Array<MeasureInput>, Array<MeasureResult>> SketchPolicyNode::ContinueSearchOneRound(
@@ -1461,7 +1455,7 @@ std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
 }
 
 
-void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer,
+void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer,
                                                  std::vector<Array<State>*> next_states, bool firsttime_random,
                                                  int* model_age) {
   // PrintTitle("Search", verbose);
@@ -1480,10 +1474,6 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
       this, &state,
       v_splitMeta_info);  // Calculate factor list problem size --> N = 6 factor[1, 2, 3, 6]
   
-  // reg --> 2
-  // tb --> 2
-  // sm = tb*reg
-
   //current pz use it as reg_tile_factors;
   std::unordered_map<std::string, std::vector<int>> tmp_sm_factors;
   for(auto p : pz_factors){
@@ -1497,23 +1487,16 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, ProgramM
   // PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
-  // int idx = 0;
-  // std::cout << "size of next_states " << next_states->size() << std::endl;
-  // for (auto next : *next_states) {
-  //   if (next.empty()) {
-  //     std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
-  //     auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
-  //     // push back to next_states[i]
-  //     next.push_back(tmp_pop[0]);
-  //     count_sampled += 1;
-  //   }
-  //   init_population.push_back(next[0]);
-  // }
   for (int i = 0; i < num_random_states; i++) {
     auto next = next_states[i];
     // reserve space for next_states[i]
     next->reserve(1);
     if (next->empty()) {
+      if (count_sampled + 1 > n_trials) {
+        std::cout << "count_sampled + 1 > n_trials" << std::endl;
+        count_sampled = -1;
+        return;
+      }
       // std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
       auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
       // push back to next_states[i]

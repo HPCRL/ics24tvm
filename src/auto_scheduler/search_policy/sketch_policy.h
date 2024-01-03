@@ -173,7 +173,7 @@ bool isConfigKeyInTable(int key) ;
 
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  void SearchOneRoundPruePredict(int num_random_states, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, bool firsttime_random = false,  int* model_age = nullptr);
+  void SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
