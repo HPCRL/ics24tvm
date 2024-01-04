@@ -610,9 +610,24 @@ class BCExtractor : public StmtExprVisitor {
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
         //std::cout << "int" << int_op->value << std::endl;
-        threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+        threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
       }
     }
+    // else if (op->a.as<FloorModNode>() ){
+    //  // std::cout << " Div lefg mod node "<< op->a.as<FloorModNode>()->a  << std::endl;
+    //   if (op->a.as<FloorModNode>()->a.as<VarNode>()){
+    //     const VarNode* var_op = op->a.as<FloorModNode>()->a.as<VarNode>();
+    //     //std::cout << "var" << var_op->name_hint << std::endl;
+    //     //std::cout << "right node "<< op->b << std::endl;
+    //     Global_threadx_val_map["div_"+op->a.as<FloorModNode>()->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
+    //   }
+    //   else if (op->a.as<FloorModNode>()->b.as<VarNode>()){
+    //     const VarNode* var_op = op->a.as<FloorModNode>()->b.as<VarNode>();
+    //     //std::cout << "var" << var_op->name_hint << std::endl;
+    //     //std::cout << "right node "<< op->b << std::endl;
+    //    Global_threadx_val_map["div_"+op->a.as<FloorModNode>()->b.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
+    //   }
+    // }   
 
 
   }
@@ -625,7 +640,7 @@ class BCExtractor : public StmtExprVisitor {
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
         //std::cout << "int" << int_op->value << std::endl;
-        threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] += op->b.as<IntImmNode>()->value;
+        threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
       }
     }
   }
@@ -1842,8 +1857,8 @@ int shift_warp(int total_load_elements, int step_len)
             cur_step_max += step_len;
         }
     }
-    //int no_bc_load = std::ceil(total_load_elements / 32);   // n warp level boardcast load
-    return addition_load;
+    int no_bc_load = (int)std::ceil(total_load_elements / 32.0);   // n warp level boardcast load
+    return addition_load+no_bc_load;
 }
 
 
@@ -1868,7 +1883,7 @@ int shift_step(int total_load_elements, int step_len)
             addtion_load++;
         }
     }
-    return total_boardcast_bc + addtion_load - warp_num;
+    return total_boardcast_bc + addtion_load;
 }
 
 // for kernel side bc, total_load_elements = volume of the kernel sm buffer
@@ -2540,41 +2555,138 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   Concurrent_estimate = WLP*ILP;
   OI_Global = computeOI_Global(global_trans, parallel_data_map, true_reduction_data_map, stencil_reduction_data_map);
   
+  int kernel_shared_trans_per_block = 0;
+  int input_shared_trans_per_block = 0;
+  int num_warp = (int)std::ceil(thread_block_size/32.0);
+  int stride = 1;  // TODO: handle stride for passing in 
+  std::string op_key = task->workload_key;
+  // if (op_key.find("conv") != std::string::npos){
+  //   std::cout << " search task" <<task->workload_key << std::endl;
+  //   auto pos = op_key.find("[", 1);
+  //   auto pos2 = op_key.find(",", pos);
+  //   stride = std::stoi(op_key.substr(pos+1, pos2-pos-1));
+  //   std::cout << "stride " << stride << std::endl;
+  // }
   // std::cout << "access_striding_info  " << access_striding_info.size() << std::endl;
   int additional_bc = 0;
   for (TDx_access_info itr : access_striding_info){
     // std::cout << itr.buffer_name << std::endl;
     if (itr.local_threadx_val_map.size() == 0){
       // std::cout << "WARNING! no local threadx in the buffer, boardcasting"  << std::endl;
+      if (itr.buffer_name.find("kernel") != std::string::npos){
+        kernel_shared_trans_per_block = sm_rc * sm_rx * sm_ry * reg_ff * num_warp;
+      }
+      if (itr.buffer_name.find("temp") != std::string::npos){
+        // input rarly boardcast
+        input_shared_trans_per_block = sm_rc * (reg_xx * tb_xx) * sm_rx * (reg_yy * tb_yy) * sm_ry * num_warp;
+      }
     }
     else{
       if (itr.buffer_name.find("temp") != std::string::npos){
         // std::cout << "temp buffer adj" << std::endl;
-        // int total_load_elements = itr.buffer_touch_size/outer_time_serial_factor;
-        // if (itr.local_threadx_val_map["mod_threadIdx.x"] <  32){
-        //   int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
-        //   additional_bc += approxi_bc_additional(step_len, total_load_elements);
-        // }
-      }
-      else if (itr.buffer_name.find("kernel") != std::string::npos){
-        // std::cout << "kernel buffer adj" << std::endl;
-        int total_load_elements = itr.buffer_touch_size/outer_time_serial_factor;
         int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
+        int total_load_elements = itr.buffer_touch_size/outer_time_serial_factor;
+        // std::cout << "temp buffer div "<< step_len  << std::endl;
 
-        // for (auto el : itr.local_threadx_val_map){
-        //   std::cout << el.first << " " << el.second << std::endl;
-        // }
-        if (sm_rc*sm_rx*sm_ry*reg_ff % 32 == 0){   //TODO:: very ah hoc; make general
-          additional_bc += approxi_bc_additional(step_len, total_load_elements);
 
+        int input_fvi_size = stride*(reg_xx * tb_xx)+(sm_rx-1);
+        int output_fvi_size = (reg_xx * tb_xx);
+        std::unordered_map<int, int> bank;
+        for (int i = 0; i < 32; i++)
+            bank[i] = 0;
+
+        for (int threadIdx_x = 0; threadIdx_x < 32; threadIdx_x++){
+          int address = threadIdx_x % thread_block_size / output_fvi_size * input_fvi_size + threadIdx_x % output_fvi_size * stride;
+          bank[address % 32] += 1;
         }
+
+        int max_bc = 1;   //assume hit once
+        for (auto &i : bank){
+          if (i.second > max_bc)
+            max_bc = i.second;
+        }
+
+      
+        // if (max_bc > 1){
+        //   std::cout << "input_fvi_size " << input_fvi_size << std::endl;
+        //   std::cout << "output_fvi_size " << output_fvi_size << std::endl;
+        //   for (auto &i : bank){
+        //     std::cout << i.first << " " << i.second << std::endl;
+        //   }
+        //   std::cout << "INPUT Has buffer bank conflict in the warp " << max_bc << std::endl;
+        // }
+        int total_load_elements_hw = ((reg_xx * tb_xx) * stride + sm_rx-1)* ((reg_yy * tb_yy) * stride + sm_ry-1);
+        // std::cout << "INPUT total_load_elements_hw " << total_load_elements_hw << std::endl;
+        // std::cout << "INPUT rounds " <<  (int)std::ceil(total_load_elements_hw/32.0) << std::endl;
+        input_shared_trans_per_block = max_bc * (int)std::ceil(total_load_elements_hw/32.0) * sm_rc; // C is not split, so no need to times C
+
+
+        // std::unordered_map<int, int> bank;
+        // for (int i = 0; i < 32; i++)
+        //     bank[i] = 0;
+
+        // int max_bc = 1;   //assume hit once
+        // for (int threadIdx_x = 0; threadIdx_x < tb_xx*tb_yy; threadIdx_x++){
+        //   int address = threadIdx_x % thread_block_size / output_fvi_size * input_fvi_size + threadIdx_x % output_fvi_size*stride;
+        //   bank[address % 32] += 1;
+        //   //hit one warp
+        //   if (threadIdx_x % 32 == 0 && threadIdx_x != 0 || threadIdx_x == thread_block_size-1){
+        //     for (auto &i : bank){
+        //       if (i.second > max_bc)
+        //         max_bc = i.second;
+        //     }
+        //     if (max_bc > 1){
+        //       // std::cout << "input_fvi_size " << input_fvi_size << std::endl;
+        //       // std::cout << "output_fvi_size " << output_fvi_size << std::endl;
+        //       // for (auto &i : bank){
+        //       //   std::cout << i.first << " " << i.second << std::endl;
+        //       // }
+        //       std::cout << "INPUT Has buffer bank conflict in the warp " << max_bc << std::endl;
+        //       additional_bc += (max_bc-1);
+        //     }
+        //     //clean bank for next warp
+        //     max_bc = 1;
+        //     for (int i = 0; i < 32; i++)
+        //       bank[i] = 0;
+
+        //   }
+        // }
+      } // end of input shared
+
+      if (itr.buffer_name.find("kernel") != std::string::npos){
+        // std::cout << "kernel buffer adj" << std::endl;
+        int step_len = itr.local_threadx_val_map["div_threadIdx.x"];       
+        int total_load_elements = sm_rc*sm_rx*sm_ry*reg_ff;
+        if (sm_rc*sm_rx*sm_ry*reg_ff % 32 == 0){ 
+          if (step_len < 32){
+            // std::cout << "Kernel <32  Has buffer bank conflict in the warp " << approxi_bc_additional(step_len, thread_block_size)  << std::endl;
+            //kernel_shared_trans_per_block = std::ceil(32 / step_len) * sm_rc*sm_rx*sm_ry*reg_ff*num_warp;  // with bank conflict
+
+            kernel_shared_trans_per_block = approxi_bc_additional(step_len, thread_block_size) * sm_rc*sm_rx*sm_ry*reg_ff;
+          }else{
+            // std::cout << "Kernel >32 Has buffer bank conflict in the warp " << approxi_bc_additional(step_len, thread_block_size)  << std::endl;
+            kernel_shared_trans_per_block = approxi_bc_additional(step_len, thread_block_size) * sm_rc*sm_rx*sm_ry*reg_ff;
+          }
+        }else{
+            kernel_shared_trans_per_block = num_warp * sm_rc*sm_rx*sm_ry*reg_ff;
+        }
+
+        // if (sm_rc*sm_rx*sm_ry*reg_ff % 32 == 0){   //TODO:: very ah hoc; make general
+        //   std::cout << "Kernel  Has buffer bank conflict in the warp " << approxi_bc_additional(step_len, total_load_elements) <<std::endl;
+        //   additional_bc += approxi_bc_additional(step_len, total_load_elements); 
+        // }
+
       }
     }
   }
+  // std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
+  // std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
 
-  additional_bc *= outer_time_serial_factor;
 
-  float adj_shared_trans_per_tb = shared_trans_per_tb+additional_bc;
+  kernel_shared_trans_per_block *= outer_time_serial_factor;
+  input_shared_trans_per_block *= outer_time_serial_factor;
+  int adj_shared_trans_per_tb = kernel_shared_trans_per_block+input_shared_trans_per_block;
+
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
   // output: nn * ff * yy * xx
@@ -2584,7 +2696,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout<< "\n---Check BC---" << std::endl;
   // std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
   // std::cout<< "OI_Shared : " << OI_Shared << std::endl;
-  // std::cout<< "BankConflict : " << additional_bc << std::endl;
   // std::cout<< "OI_Shared_ops : " << thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 << std::endl;
   // std::cout<< "original shared_trans_per_tb : " <<shared_trans_per_tb << std::endl;
   // std::cout<< "adjusted shared_trans_per_tb : " <<adj_shared_trans_per_tb << std::endl;
@@ -2737,10 +2848,12 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
     //std::cout<< "num_TB : " << num_TB << std::endl;
     const xFeatureSet& fea_set = x.second;
     for (const auto& xacc_fea : fea_set.access_feas) {
-      // std::cout<< "Buffer name : " << xacc_fea.buffer_name << std::endl;
-      // std::cout<< "Buffer scope : " << xacc_fea.scope << std::endl;
-      // std::cout<< "Buffer acc_type : " << xacc_fea.acc_type << std::endl;
-      // std::cout<< "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      // std::cout << "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
+      // std::cout << "Buffer acc_type : " << int(xacc_fea.acc_type) << std::endl;
+      // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      // std::cout << "*** Buffer vect  : " << xacc_fea.vector_len << std::endl;
+      // std::cout << "block_dimx " << block_dimx << std::endl;
       int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
       // std::cout<< "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
@@ -2751,6 +2864,9 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
             shared_trans_kernel += warp_trans;
         }
         BCExtractor bc_extractor;
+        // std::cout << "Buffer name : " << xacc_fea.buffer_name << std::endl;
+        // std::cout << "Buffer scope : " << xacc_fea.scope << std::endl;
+        // std::cout << "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
         // std::cout << "Buffer indices : " << std::endl;
         for (const auto& x : xacc_fea.indices) {
           for (const auto& y : x) {
@@ -2766,7 +2882,6 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
           // std::cout << "threadx_val_map : " << x.first << " " << x.second << std::endl;
           threadx_val_map[x.first] = x.second;
         }
-        threadx_val_map.clear();
 
         TDx_access_info tdx_acc_info;
         tdx_acc_info.buffer_name = xacc_fea.buffer_name;
