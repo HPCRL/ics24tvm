@@ -1490,11 +1490,12 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
   Array<State> init_population;
   for (int i = 0; i < batch_size; i++) {
     auto next = next_states[i];
-    // reserve space for next_states[i]
-    next->reserve(1);
     if (next->empty()) {
       if (count_sampled + 1 > n_start + batch_size - 1) {
-        std::cout << "count_sampled + 1 > n_start" << std::endl;
+        // std ::cout << "count_sampled = " << count_sampled << std::endl;
+        // std ::cout << "n_start = " << n_start << std::endl;
+        // std ::cout << "batch_size = " << batch_size << std::endl;
+        // std::cout << "count_sampled + 1 > n_start + batch_size - 1" << std::endl;
         count_sampled = -1;
         return;
       }
