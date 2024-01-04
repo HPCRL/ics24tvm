@@ -230,9 +230,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
   bool firsttime_random = true;
   num_failed_local_search_ = 0;
-  int init_num = 1;  // num of batch size
+  int batch_size = 2;  // num of batch size
   int model_age = 0;
   count_sampled = 0;
+  int num_start = n_trials;
 
   // generate a model based on random sampling and measure them
   if (ct == 0) {  // just run it at the first time
@@ -259,13 +260,13 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     }
   }
 
-  for (int i = 0; i < init_num; i++) {
+  for (int i = 0; i < batch_size; i++) {
     next_states.push_back(new Array<State>());
   }
   while (measured_states_throughputs_.size() < 3000) {
     // // init next_states
     // create new predict based search
-    SearchOneRoundPruePredict(init_num, n_trials, measurer, next_states, firsttime_random,
+    SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, firsttime_random,
                               &model_age);
     // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
     // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
@@ -1455,7 +1456,7 @@ std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
 }
 
 
-void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer,
+void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, ProgramMeasurer measurer,
                                                  std::vector<Array<State>*> next_states, bool firsttime_random,
                                                  int* model_age) {
   // PrintTitle("Search", verbose);
@@ -1487,13 +1488,13 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int num_random_states, int n_tr
   // PrintTitle("Generate Base States", verbose);
   // base states in the init population
   Array<State> init_population;
-  for (int i = 0; i < num_random_states; i++) {
+  for (int i = 0; i < batch_size; i++) {
     auto next = next_states[i];
     // reserve space for next_states[i]
     next->reserve(1);
     if (next->empty()) {
-      if (count_sampled + 1 > n_trials) {
-        std::cout << "count_sampled + 1 > n_trials" << std::endl;
+      if (count_sampled + 1 > n_start + batch_size - 1) {
+        std::cout << "count_sampled + 1 > n_start" << std::endl;
         count_sampled = -1;
         return;
       }
