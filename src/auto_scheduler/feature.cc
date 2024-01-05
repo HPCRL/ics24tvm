@@ -2213,44 +2213,52 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     }
     //std::cout<< "end-----------------------------------" << std::endl;
   }
-  int outer_time_serial_factor = (pz_rc / sm_rc) * (pz_rx / sm_rx) * (pz_ry / sm_ry);
+
+  // use true_reduction_data_map and stencil_reduction_data_map
+  int outer_time_serial_factor = 1;
+  for (auto itr : true_reduction_data_map ){
+    outer_time_serial_factor *= itr.second.pz / itr.second.sm;
+  }
+  for (auto itr : stencil_reduction_data_map ){
+    outer_time_serial_factor *= itr.second.pz / itr.second.sm;
+  }
 
   // check if all the reg/tb/sm are not zero
   for (auto itr : parallel_data_map ){
     if (itr.second.reg == 0 || itr.second.tb == 0 || itr.second.pz == 0){
-      //std::cout<< "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
+      std::cout<< "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
     }
   }
   for (auto itr : true_reduction_data_map ){
     if (itr.second.sm == 0 || itr.second.pz == 0){
-      //std::cout<< "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+      std::cout<< "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
     }
   }
   for (auto itr : stencil_reduction_data_map ){
     if (itr.second.sm == 0 || itr.second.pz == 0){
-      //std::cout<< "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+      std::cout<< "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
     }
   }
 
   //std::cout<< "heuristic pruning-----------------------------------" << std::endl;
 
-  // if (parallel_data_map.size()){
-  //   for( auto each: parallel_data_map){
-  //     //std::cout<< "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
-  //   }
-  // }
+  if (parallel_data_map.size()){
+    for( auto each: parallel_data_map){
+      std::cout<< "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
+    }
+  }
 
-  // if (true_reduction_data_map.size()){
-  //   for( auto each: true_reduction_data_map){
-  //     //std::cout<< "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
-  //   }
-  // }
+  if (true_reduction_data_map.size()){
+    for( auto each: true_reduction_data_map){
+      std::cout<< "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+    }
+  }
 
-  // if (stencil_reduction_data_map.size()){
-  //   for( auto each: stencil_reduction_data_map){
-  //     //std::cout<< "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
-  //   }
-  // }
+  if (stencil_reduction_data_map.size()){
+    for( auto each: stencil_reduction_data_map){
+      std::cout<< "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+    }
+  }
 
 
 
