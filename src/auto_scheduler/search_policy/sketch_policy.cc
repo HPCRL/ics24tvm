@@ -2315,7 +2315,7 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
 Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
   PrintTitle("Sample Initial Population", verbose);
   // Use this population as the parallel degree to do sampling
-  int population = 1;
+  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
   int fail_ct = 0;
@@ -2329,7 +2329,7 @@ Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches
   std::unordered_set<std::string> explored_state_strs;
   size_t iter = 1;
   size_t unchange_cnt = 0;
-  while (static_cast<int>(out_states.size()) < 1) {
+  while (static_cast<int>(out_states.size()) < sample_init_min_pop_) {
     std::vector<State> temp_states(population);
 
     // Sample a batch of states randomly

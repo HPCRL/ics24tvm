@@ -2723,7 +2723,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(ILP);
   features->push_back(WLP);
   features->push_back(Concurrent_estimate);
-  // features->push_back(totalReuse);
+  features->push_back(totalReuse);
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
   
@@ -3069,7 +3069,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
     int a, b, c, d;
     std::vector<float> features_extracted;
-    int feature_size = 7;
+    int feature_size = 8;
     try {
       std::vector<TDx_access_info> access_striding_info;
       access_striding_info.reserve(10);
