@@ -124,7 +124,9 @@ class SketchPolicyNode : public SearchPolicyNode {
    */
   Array<State> GenerateSketches();
   ConfigKey map_to_configkey(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
+  int cur_config_len(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
   std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
+  std::vector<ConfigKey> MaskUpDownMutate(std::vector<int> mask, std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
 
 bool isConfigKeyInTable(int key) ;
   /*!

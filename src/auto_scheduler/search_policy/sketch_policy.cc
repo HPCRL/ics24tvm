@@ -230,7 +230,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
   bool firsttime_random = true;
   num_failed_local_search_ = 0;
-  int batch_size = 2;  // num of batch size
+  int batch_size = 1;  // num of batch size
   int model_age = 0;
   count_sampled = 0;
   int num_start = n_trials;
@@ -721,7 +721,7 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto down_idx = idx - 1;
         auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
         // valid
-        if (down_inner_inner <= pz && down_inner_inner <= max_innermost_split_factor) {
+        if (down_inner_inner <= pz) {
           // std::cout << "down_inner_inner: " << down_inner_inner << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = down_inner_inner;
           if (pz % tmp_config[dim_name][0] == 0) {
@@ -732,6 +732,236 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
       }
     }
   }
+  return neighbors_config_key;
+}
+
+
+// UpDownMutate for current_config, using pz_factors
+std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
+    std::vector<int> mask, 
+    std::unordered_map<std::string, std::vector<int>> current_config,
+    std::unordered_map<std::string, std::vector<int>> pz_factors,
+    std::vector<splitMeta*> v_splitMeta_info) {
+  std::vector<ConfigKey> neighbors_config_key;
+  ConfigKey mutated_config_key;
+  //generate the change map
+  std::unordered_map<std::string, std::vector<int>> change_map;
+  // for each dim, store its mask
+  int i = 0;
+  for (auto sm : v_splitMeta_info) {
+    if (sm->parallel) {
+      auto dim_name = sm->origin_itr->name;
+      auto tb_change_mask = mask[i];
+      auto reg_change_mask = mask[i+1];
+      // std::cout << "dime: " << dim_name << " tb_change_mask: " << tb_change_mask << " reg_change_mask: " << reg_change_mask << std::endl;
+      std::vector<int> tmp;
+      tmp.push_back(tb_change_mask);
+      tmp.push_back(reg_change_mask);
+      change_map[dim_name] = tmp;
+      i += 2;
+    } else {
+      auto dim_name = sm->origin_itr->name;
+      auto inner_inner_change_mask = mask[i];
+      //  std::cout << "dime: " << dim_name << " inner_inner_change_mask: " << inner_inner_change_mask << std::endl;
+      std::vector<int> tmp;
+      tmp.push_back(inner_inner_change_mask);
+      change_map[dim_name] = tmp;      
+      i += 1;
+    }
+  }
+
+  // up-down mutate for tb or reg, push into the neighbors_config_key
+  //  int max_innermost_split_factor = GetIntParam(this->params,
+  //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
+  int max_innermost_split_factor = INT_MAX;
+  std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
+  bool is_valid = true;
+  for (auto sm : v_splitMeta_info) {
+    if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
+      auto dim_name = sm->origin_itr->name;
+      auto pz = sm->problem_size;
+      auto reg = current_config[dim_name][0];
+      auto tb = current_config[dim_name][1];
+
+      auto tb_change_mask = change_map[dim_name][0];
+      auto reg_change_mask = change_map[dim_name][1];
+      
+      //remap to our inclusive tile size
+      // find the index of tb and reg in pz_factors
+      tb = tb * reg;
+
+      auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+      auto tb_index = std::find(pz_factors[dim_name+"_sm"].begin(), pz_factors[dim_name+"_sm"].end(), tb);
+
+      // if not found in pz_factors, then continue
+      if (reg_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
+        continue;
+      }
+
+      if (tb_change_mask == 1){
+        // up for tb
+        if (tb_index != pz_factors[dim_name+"_sm"].end() - 1) {
+          auto up_tb_index = tb_index + 1;
+          auto up_tb = pz_factors[dim_name+"_sm"].at(up_tb_index - pz_factors[dim_name+"_sm"].begin());
+          if (up_tb >= reg) {
+            tmp_config[dim_name][1] = up_tb/reg;
+          }
+        }
+      }
+      else if (tb_change_mask == -1) {
+        // down for tb
+        if (tb_index != pz_factors[dim_name+"_sm"].begin()) {
+          auto down_tb_index = tb_index - 1;
+          auto down_tb = pz_factors[dim_name+"_sm"].at(down_tb_index - pz_factors[dim_name+"_sm"].begin());
+          if (down_tb >= reg ) {
+            tmp_config[dim_name][1] = down_tb/reg;
+          }
+        }
+      }
+
+      if (reg_change_mask == 1){
+        // up for reg
+        if (reg_index != pz_factors[dim_name].end() - 1) {
+          auto up_reg_index = reg_index + 1;
+          auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
+          tmp_config[dim_name][0] = up_reg;
+        }
+      } else if (reg_change_mask == -1) {
+        // down for reg
+        if (reg_index != pz_factors[dim_name].begin()) {
+          auto down_reg_index = reg_index - 1;
+          auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
+          tmp_config[dim_name][0] = down_reg;
+        }
+      }
+      int new_tb = tmp_config[dim_name][1];
+      int new_reg = tmp_config[dim_name][0];
+      if (new_tb < new_reg) {
+        is_valid = false;
+        break;
+      }
+    } else {
+      auto dim_name = sm->origin_itr->name;
+      auto pz = sm->problem_size;
+      auto inner_inner = current_config[dim_name][0];
+      // std::cout << "inner_inner: " << inner_inner << std::endl;
+      auto inner_inner_change_mask = change_map[dim_name][0];
+      // std::cout << "dime: " << dim_name << " inner_inner_change_mask: " << inner_inner_change_mask << std::endl;
+      // std::cout << "pz: " << pz << ", inner_inner: " << inner_inner << std::endl;
+      // std::cout << "pz factors: " << std::endl;
+      // for (auto& v : pz_factors[dim_name]) {
+      //   std::cout << v << " ";
+      // }
+
+      auto idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+
+      if (inner_inner_change_mask == 1){
+        // up
+        if (idx != pz_factors[dim_name].end() - 1) {
+          tmp_config = current_config;
+          auto up_idx = idx + 1;
+          auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
+          
+          tmp_config[dim_name][0] = up_inner_inner;
+        }
+      } else if (inner_inner_change_mask == -1) {
+        // down
+        if (idx != pz_factors[dim_name].begin()) {
+          tmp_config = current_config;
+          auto down_idx = idx - 1;
+          auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
+          tmp_config[dim_name][0] = down_inner_inner;
+        }
+      }
+    }
+  }
+  // if (is_valid) {
+  //   mutated_config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+  //   neighbors_config_key.push_back(mutated_config_key);
+  // }
+
+
+
+
+  // std::cout << "current mask: \n" << std::endl;
+  // for (auto& m : mask) {
+  //   std::cout << m << " ";
+  // }
+  // after mutate check if tb > reg for parallel dims
+  for (auto sm : v_splitMeta_info) {
+    if (sm->parallel) {
+      auto dim_name = sm->origin_itr->name;
+      auto reg = tmp_config[dim_name][1];
+      auto tb = tmp_config[dim_name][0];
+      auto pz = sm->problem_size;
+      if (pz < tb*reg || pz %(tb*reg) != 0) {
+        is_valid = false;
+        break;
+      }
+    }
+  }
+  if (is_valid) {
+    mutated_config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+    neighbors_config_key.push_back(mutated_config_key);
+  }
+
+
+
+  // std::cout << std::endl;
+  // // print 
+  // for (auto& c : change_map) {
+  //   std::cout << c.first << ": ";
+  //   for (auto& v : c.second) {
+  //     std::cout << v << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
+  // // exit(-1);
+
+  // std::cout << "\n---------" << std::endl;
+
+  // // printout pz_factors
+  // std::cout << "pz_factors: " << std::endl;
+  // for (auto& pz : pz_factors) {
+  //   std::cout << pz.first << ": ";
+  //   for (auto& v : pz.second) {
+  //     std::cout << v << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
+
+  // std::cout << "\n---------" << std::endl;
+
+  // // print current config key
+  // std::cout << "current_config: " << std::endl;
+  // for (auto& c : current_config) {
+  //   std::cout << c.first << ": ";
+  //   for (auto& v : c.second) {
+  //     std::cout << v << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
+  
+
+  // std::cout << "\n---------" << std::endl;
+  // ConfigKey current_config_key = map_to_configkey(current_config, v_splitMeta_info);
+  // std::cout << "TBnn\tRegnn\tTBff\tRegff\tTByy\tRegyy\tTBxx\tRegxx\tRc\t1\tRy\t1\tRx\t1: " << std::endl;
+  // std::cout << "current_config_key: " << std::endl;
+  // for (auto& c : current_config_key) {
+  //   std::cout << c << "\t";
+  // }
+
+
+  // std::cout << "\n---------" << std::endl;
+  // // print neighbors config key
+  // for (auto& c : neighbors_config_key) {
+  //   std::cout << "neighbors_config_key: " << std::endl;
+  //   for (auto& cc : c) {
+  //     std::cout << cc << "\t";
+  //   }
+  //   std::cout << std::endl;
+  // }
+  // std::cout << "neighbors_config_key size: " << neighbors_config_key.size() << std::endl;
   return neighbors_config_key;
 }
 
@@ -764,6 +994,7 @@ std::vector<ConfigKey> SketchPolicyNode::GetDirectNeighbors(
     std::vector<splitMeta*> v_splitMeta_info) {
   std::vector<ConfigKey> neighbors_config_key =
       UpDownMutate(current_config, pz_factors, v_splitMeta_info);
+  // std::cout << "size of direct neighbors: " << neighbors_config_key.size() << std::endl;
   return neighbors_config_key;
 }
 
@@ -806,6 +1037,159 @@ std::string ConfigKey2string(const ConfigKey& conf) {
   // std::cout << "ConfigKey2string: " << res << std::endl;
   return res;
 }
+
+void generateMasksRecursively(int dims, std::vector<int>& mask, const std::vector<int>& chosen_dims, 
+                              std::vector<std::vector<int>>& masks, int index = 0) {
+    if (index == chosen_dims.size()) {
+        masks.push_back(mask);
+        return;
+    }
+
+    // set current dimension to -1
+    mask[chosen_dims[index]] = -1;
+    generateMasksRecursively(dims, mask, chosen_dims, masks, index + 1);
+
+    // set current dimension to 1
+    mask[chosen_dims[index]] = 1;
+    generateMasksRecursively(dims, mask, chosen_dims, masks, index + 1);
+}
+
+void generateMasks(int dims, const std::vector<int>& chosen_dims, std::vector<std::vector<int>>& masks) {
+    std::vector<int> mask(dims, 0); // 0 means not chosen
+
+    // change selected dimensions to 1/-1
+    generateMasksRecursively(dims, mask, chosen_dims, masks);
+}
+
+std::vector<int> getRemainingDims(int total_dims, const std::vector<int>& exclude_dims) {
+    std::vector<int> remaining_dims;
+    for (int i = 0; i < total_dims; ++i) {
+        if (std::find(exclude_dims.begin(), exclude_dims.end(), i) == exclude_dims.end()) {
+            remaining_dims.push_back(i);
+        }
+    }
+    return remaining_dims;
+}
+
+std::vector<int> getExcludedDims(
+    std::unordered_map<std::string, std::vector<int>> current_config,
+    std::vector<splitMeta*> v_splitMeta_info, int total_dims) {
+    std::vector<int> excluded_dims;
+    int i = 0;
+
+    // logic here: if pz==1, then exclude this dimension
+    for (auto sm : v_splitMeta_info) {
+      // std::cout << "current_config: \n" << std::endl;
+      if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
+        int pz = sm->problem_size;
+        if (pz == 1) {
+          excluded_dims.push_back(i);
+          excluded_dims.push_back(i+1);
+        }
+        i += 2;
+      } else {
+        int pz = sm->problem_size;
+        if (pz == 1) {
+          excluded_dims.push_back(i);
+        }
+        i += 1;
+      }
+    }
+    // std::cout << "excluded_dims: " << std::endl;
+    // for (auto& d : excluded_dims) {
+    //   std::cout << d << " ";
+    // }
+    return excluded_dims;
+}
+
+int SketchPolicyNode::cur_config_len(
+    std::unordered_map<std::string, std::vector<int>> current_config,
+    std::vector<splitMeta*> v_splitMeta_info) {
+  int i = 0;
+  for (auto sm : v_splitMeta_info) {
+    // std::cout << "current_config: \n" << std::endl;
+    if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
+      i += 2;
+    } else {
+      i += 1;
+    }
+  }
+  return i;
+}
+
+// std::vector<std::vector<int>> remove_invalid_mask(
+//     std::unordered_map<std::string, std::vector<int>> current_config,
+//     std::vector<splitMeta*> v_splitMeta_info,
+//     std::vector<std::vector<int>>& masks) {
+
+//   std::vector<std::vector<int>> filtered_masks;
+
+//   // remove pz==1 dimension's mask if its mask is not 0.
+//   int i = 0;
+  
+//   // create map dims_pz1_map_
+//   std::unordered_map<std::string, bool> dims_pz1_map_;
+//   for (auto sm : v_splitMeta_info) {
+//     if (sm->parallel) {
+//       auto dim_name = sm->origin_itr->name;
+//       auto pz = sm->problem_size;
+//       if (pz == 1) {
+//         dims_pz1_map_[dim_name] = true;
+//       } else {
+//         dims_pz1_map_[dim_name] = false;
+//       }
+//     }
+//     else {
+//       auto dim_name = sm->origin_itr->name;
+//       auto pz = sm->problem_size;
+//       if (pz == 1) {
+//         dims_pz1_map_[dim_name] = true;
+//       } else {
+//         dims_pz1_map_[dim_name] = false;
+//       }
+//     }
+//   }
+//   // print dims_pz1_map_
+//   std::cout << "dims_pz1_map_: " << std::endl;
+//   for (auto& d : dims_pz1_map_) {
+//     std::cout << d.first << ": " << d.second << std::endl;
+//   }
+
+
+//   for (auto mask : masks) {
+//     bool valid = true;
+//     int j = 0;
+//     for (auto sm : v_splitMeta_info) {
+//       if (sm->parallel) {
+//         auto dim_name = sm->origin_itr->name;
+//         auto pz = sm->problem_size;
+//         if (dims_pz1_map_[dim_name] == true) {
+//           if (mask[j] != 0) {
+//             valid = false;
+//             break;
+//           }
+//         }
+//         j += 2;
+//       } else {
+//         auto dim_name = sm->origin_itr->name;
+//         auto pz = sm->problem_size;
+//         if (dims_pz1_map_[dim_name] == true) {
+//           if (mask[j] != 0) {
+//             valid = false;
+//             break;
+//           }
+//         }
+//         j += 1;
+//       }
+//     }
+//     if (valid) {
+//       filtered_masks.push_back(mask);
+//     }
+//   }
+
+//   return filtered_masks;
+// }
+
 
 /* Generate neighbors states for all base states
  *  @param states: base states
@@ -859,8 +1243,87 @@ Array<Array<State>> SketchPolicyNode::GenerateNeighbours(
             }
           }
         }
+        // std::cout << "size of 1+2hop neighbors_conf_key: " << neighbors_conf_key.size() << std::endl;
+
+
+
+        //print neighbors_conf_key
+        // std::cout << "1+2hop neighbors_conf_key: " << std::endl;
+        // for (auto& c : neighbors_conf_key) {
+        //   for (auto& cc : c) {
+        //     std::cout << cc << " ";
+        //   }
+        //   std::cout << std::endl;
+        // }
+
+        // //print current
+        // ConfigKey current_config_key = map_to_configkey(current_base, v_splitMeta_info);
+        // std::cout << "current_config_key: " << std::endl;
+        // for (auto& c : current_config_key) {
+        //   std::cout << c << " ";
+        // }
+        // std::cout << std::endl;
+        
+        // 3hop neighbors
+        // get mask then call mask updown mutate
+        int total_dims = cur_config_len(current_base, v_splitMeta_info);
+        // std::cout << "total_dims: " << total_dims << std::endl;
+        int num_hops = 3;
+        // std::vector<int> exclude_dims = {0, 1};
+        std::vector<int> exclude_dims = getExcludedDims(current_base, v_splitMeta_info, total_dims);
+
+        // get remaining dims
+        std::vector<int> remaining_dims = getRemainingDims(total_dims, exclude_dims);
+
+        // generate all combinations of chosen dimensions
+        std::vector<int> dimensions(remaining_dims.size(), 0);
+        std::fill(dimensions.end() - num_hops, dimensions.end(), 1);
+
+        std::vector<std::vector<int>> masks;
+
+        do {
+            std::vector<int> chosen_dims;
+            for (int i = 0; i < remaining_dims.size(); ++i) {
+                if (dimensions[i] == 1) {
+                    chosen_dims.push_back(remaining_dims[i]);
+                }
+            }
+
+            // generate masks for chosen dimensions
+            generateMasks(total_dims, chosen_dims, masks);
+
+        } while (std::next_permutation(dimensions.begin(), dimensions.end()));
+
+        // std::cout << "masks size: " << masks.size() << std::endl;
+        // std::cout <<"masks size: " << masks.size() << std::endl;
+        // for (auto mask: masks) {
+        //   for (auto m: mask) {
+        //     std::cout << m << "\t";
+        //   }
+        //   std::cout << std::endl;
+        // }
+        // exit(-1);
+
+        // test mask 0 0 0 0 0 0 0 0 -1 -1 -1
+        // std::vector<int> mask = masks[0];
+        for (auto mask : masks) {
+          std::vector<ConfigKey> mask_neighbors_config_key =
+              MaskUpDownMutate(mask, current_base, pz_factors, v_splitMeta_info);
+          // std::cout << "mask_neighbors_config_key size: " << mask_neighbors_config_key.size() << std::endl;
+          for (auto n : mask_neighbors_config_key) {
+            const auto state_str = ConfigKey2string(n);
+            if (neighbors_remove_dup.count(state_str) == 0) {
+              neighbors_remove_dup.insert(state_str);
+              neighbors_conf_key.push_back(n);
+            }
+          }
+        }
+        // std::cout << "\nsize of 3hop neighbors_conf_key: " << neighbors_conf_key.size() << std::endl;
+        // exit(-1);
+
         all_neighbors_config_key[index] = neighbors_conf_key;
       });
+
 
   int idx = 0;
   for (auto& state_ite : states) {
@@ -1852,7 +2315,7 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
 Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches) {
   PrintTitle("Sample Initial Population", verbose);
   // Use this population as the parallel degree to do sampling
-  int population = GetIntParam(params, SketchParamKey::EvolutionarySearch::population);
+  int population = 1;
   auto tic_begin = std::chrono::high_resolution_clock::now();
 
   int fail_ct = 0;
@@ -1866,7 +2329,7 @@ Array<State> SketchPolicyNode::SampleInitPopulation(const Array<State>& sketches
   std::unordered_set<std::string> explored_state_strs;
   size_t iter = 1;
   size_t unchange_cnt = 0;
-  while (static_cast<int>(out_states.size()) < sample_init_min_pop_) {
+  while (static_cast<int>(out_states.size()) < 1) {
     std::vector<State> temp_states(population);
 
     // Sample a batch of states randomly
