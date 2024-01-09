@@ -751,8 +751,8 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   for (auto sm : v_splitMeta_info) {
     if (sm->parallel) {
       auto dim_name = sm->origin_itr->name;
-      auto tb_change_mask = mask[i];
-      auto reg_change_mask = mask[i+1];
+      auto reg_change_mask = mask[i];
+      auto tb_change_mask = mask[i+1];
       // std::cout << "dime: " << dim_name << " tb_change_mask: " << tb_change_mask << " reg_change_mask: " << reg_change_mask << std::endl;
       std::vector<int> tmp;
       tmp.push_back(tb_change_mask);
@@ -834,9 +834,8 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
           tmp_config[dim_name][0] = down_reg;
         }
       }
-      int new_tb = tmp_config[dim_name][1];
       int new_reg = tmp_config[dim_name][0];
-      if (new_tb < new_reg) {
+      if (tb < new_reg) {
         is_valid = false;
         break;
       }
@@ -858,7 +857,6 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
       if (inner_inner_change_mask == 1){
         // up
         if (idx != pz_factors[dim_name].end() - 1) {
-          tmp_config = current_config;
           auto up_idx = idx + 1;
           auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
           
@@ -867,7 +865,6 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
       } else if (inner_inner_change_mask == -1) {
         // down
         if (idx != pz_factors[dim_name].begin()) {
-          tmp_config = current_config;
           auto down_idx = idx - 1;
           auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
           tmp_config[dim_name][0] = down_inner_inner;

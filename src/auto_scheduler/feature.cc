@@ -2214,25 +2214,25 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     //std::cout<< "end-----------------------------------" << std::endl;
   }
 
-  // check if all the reg/tb/sm are not zero
-  for (auto itr : parallel_data_map ){
-    if (itr.second.reg == 0 || itr.second.tb == 0 || itr.second.pz == 0){
-      std::cout<< "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
-  for (auto itr : true_reduction_data_map ){
-    if (itr.second.sm == 0 || itr.second.pz == 0){
-      std::cout<< "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
-  for (auto itr : stencil_reduction_data_map ){
-    if (itr.second.sm == 0 || itr.second.pz == 0){
-      std::cout<< "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
-      return std::make_tuple(-1, -1, -1, -1);
-    }
-  }
+  // // check if all the reg/tb/sm are not zero
+  // for (auto itr : parallel_data_map ){
+  //   if (itr.second.reg == 0 || itr.second.tb == 0 || itr.second.pz == 0){
+  //     std::cout<< "ERROR: parallel_data_map " << itr.first << " reg " << itr.second.reg << " tb " << itr.second.tb << " pz " << itr.second.pz << std::endl;
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
+  // for (auto itr : true_reduction_data_map ){
+  //   if (itr.second.sm == 0 || itr.second.pz == 0){
+  //     std::cout<< "ERROR: true_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
+  // for (auto itr : stencil_reduction_data_map ){
+  //   if (itr.second.sm == 0 || itr.second.pz == 0){
+  //     std::cout<< "ERROR: stencil_reduction_data_map " << itr.first << " sm " << itr.second.sm << " pz " << itr.second.pz << std::endl;
+  //     return std::make_tuple(-1, -1, -1, -1);
+  //   }
+  // }
 
   // use true_reduction_data_map and stencil_reduction_data_map
   int outer_time_serial_factor = 1;
@@ -2241,6 +2241,9 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
   for (auto itr : stencil_reduction_data_map ){
     outer_time_serial_factor *= itr.second.pz / itr.second.sm;
+  }
+  if (outer_time_serial_factor == 0){
+    return std::make_tuple(-1, -1, -1, -1);
   }
 
   //std::cout<< "heuristic pruning-----------------------------------" << std::endl;
