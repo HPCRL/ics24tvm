@@ -1960,7 +1960,7 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
         return;
       }
       // std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
-      auto tmp_pop = SampleCUDAPopulation(sketch_cache_, 2);
+      auto tmp_pop = SampleCUDAInitPopulation(sketch_cache_, 2);
       // push back to next_states[i]
       next->push_back(tmp_pop[0]);
       count_sampled += 1;
@@ -2438,7 +2438,7 @@ Array<State> SketchPolicyNode::SampleCUDAInitPopulation(const Array<State>& sket
     //   }
     // }
 
-    if (iter % 50 == 0) {
+    if (iter % 500 == 0) {
       double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
                             std::chrono::high_resolution_clock::now() - tic_begin)
                             .count();
