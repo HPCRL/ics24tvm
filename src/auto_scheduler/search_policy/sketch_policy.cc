@@ -240,7 +240,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     if (sketch_cache_.empty()) {
       sketch_cache_ = GenerateSketches();
     }
-    initStatesForModel = SampleInitPopulation(sketch_cache_);
+    initStatesForModel = SampleCUDAInitPopulation(sketch_cache_, sample_init_min_pop_);    
     initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
     // sample to update the model
     inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
@@ -2288,6 +2288,167 @@ Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches
     }
 
     if (unchange_cnt == 5) {
+      // Reduce the target size to avoid too-long time in this phase if no valid state was found
+      // in the past iterations
+      if (sample_init_min_pop_ > 1) {
+        sample_init_min_pop_ /= 2;
+        StdCout(verbose) << "#Target has been reduced to " << sample_init_min_pop_
+                         << " due to too many failures or duplications" << std::endl;
+      }
+      unchange_cnt = 0;
+    }
+    iter++;
+  }
+
+  double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
+                        std::chrono::high_resolution_clock::now() - tic_begin)
+                        .count();
+  StdCout(verbose) << "Sample \t#s: " << out_states.size() << "\tCUDA view fail_ct: " << fail_ct
+                   << "\tTime elapsed: " << std::fixed << std::setprecision(2) << duration
+                   << std::endl;
+  return out_states;
+}
+
+Array<State> SketchPolicyNode::SampleCUDAInitPopulation(const Array<State>& sketches,
+                                                    int num_required) {
+  PrintTitle("Sample CUDA Init Population", verbose);
+  // Use this population as the parallel degree to do sampling
+  int population = num_required * 2;
+  sample_init_min_pop_ = num_required;
+  auto tic_begin = std::chrono::high_resolution_clock::now();
+
+  int fail_ct = 0;
+  Array<State> out_states;
+  std::vector<std::mt19937> rand_gens;
+  rand_gens.reserve(population);
+  for (int i = 0; i < population; i++) {
+    rand_gens.push_back(std::mt19937(rand_gen()));
+  }
+
+  std::unordered_set<std::string> explored_state_strs;
+  size_t iter = 1;
+  size_t unchange_cnt = 0;
+  while (static_cast<int>(out_states.size()) < sample_init_min_pop_) {
+    std::vector<State> temp_states(population);
+
+    // Sample a batch of states randomly
+    // TODO(Chendi): apply capacity prune here
+    support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens](int index) {
+      // Randomly choose a sketch
+      State tmp_s = sketches[(rand_gens[index])() % sketches.size()];
+      // Apply random annotation rules one by one
+      bool valid = true;
+      for (const auto& rule : init_rules) {
+        if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
+            PopulationGenerationRule::ResultKind::kInvalid) {
+          valid = false;
+          break;
+        }
+      }
+      if (valid) {
+        temp_states[index] = std::move(tmp_s);
+      }
+    });
+
+    // Filter out the states that were failed to apply initial rules
+    Array<State> cand_states;
+    for (auto tmp_s : temp_states) {
+      if (tmp_s.defined()) {
+        cand_states.push_back(std::move(tmp_s));
+      } else {
+        fail_ct++;
+      }
+    }
+
+    unchange_cnt++;
+
+    // remap to our CUDA view, no vthread
+    std::vector<splitMeta*> v_splitMeta_info;
+    v_splitMeta_info = GenerateSplitMeta(this, sketch_cache_[0]);
+    std::map<int, ConfigKey> tmp_conf_table;
+    int tmp_idx = 0;
+    for (auto s : cand_states) {
+      std::unordered_map<std::string, std::vector<int>> current_config =
+          GetStateFactor(search_task, s);
+      ConfigKey config_key = map_to_configkey(current_config, v_splitMeta_info);
+      tmp_conf_table[tmp_idx] = config_key;
+    }
+    Array<State> sampled_states =
+        SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
+    if (!sampled_states.empty()) {
+      // Run the cost model to make filter out states that failed to extract features.
+      // This may happen due to illegal schedules or the schedules that uses too much
+      // memory on GPU.
+
+      std::vector<float> pop_scores;
+      pop_scores.reserve(sampled_states.size());
+      sampled_states = search_task->compute_dag.InferBound(sampled_states);
+      PruneInvalidState(search_task, &sampled_states);
+      program_cost_model->Predict(search_task, sampled_states, &pop_scores);
+
+      for (size_t i = 0; i < sampled_states.size(); i++) {
+        const auto state_str = state_to_string(sampled_states[i], v_splitMeta_info, search_task);
+        if (pop_scores[i] > -1e10 && explored_state_strs.count(state_str) == 0) {
+          explored_state_strs.insert(state_str);
+          out_states.push_back(std::move(sampled_states[i]));
+          unchange_cnt = 0;        // Reset the counter once we found a valid state
+        } else {  // count cuda view failed, bring pop/2 to here
+          fail_ct++;
+        }
+      }
+    }
+
+
+
+
+    // if (!cand_states.empty()) {
+    //   // Run the cost model to make filter out states that failed to extract features.
+    //   // This may happen due to illegal schedules or the schedules that uses too much
+    //   // memory on GPU.
+
+    //   std::vector<float> pop_scores;
+    //   pop_scores.reserve(cand_states.size());
+    //   cand_states = search_task->compute_dag.InferBound(cand_states);
+    //   PruneInvalidState(search_task, &cand_states);
+    //   program_cost_model->Predict(search_task, cand_states, &pop_scores);
+
+
+    //   for (size_t i = 0; i < cand_states.size(); i++) {
+    //     // skip cache_failed
+    //     if (cache_failed.count(cand_states[i].ToStr()) != 0) {
+    //       continue;
+    //     }
+    //     // failure visited use toStr() to avoid
+    //     std::vector<splitMeta*> v_splitMeta_info;
+    //     v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
+    //     const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
+    //     std::unordered_map<std::string, std::vector<int>> current_config =
+    //         GetStateFactor(search_task, cand_states[i]);
+    //     ConfigKey config_key = map_to_configkey(current_config);
+    //     bool isCudaView = cuda_view(cand_states[i], current_config, v_splitMeta_info);
+    //     if (pop_scores[i] > -1e10 && isCudaView && explored_state_strs.count(state_str) == 0) {
+    //       explored_state_strs.insert(state_str);
+    //       out_states.push_back(std::move(cand_states[i]));
+    //       unchange_cnt = 0;        // Reset the counter once we found a valid state
+    //     } else if (!isCudaView) {  // count cuda view failed, bring pop/2 to here
+    //       fail_ct++;
+    //       // cache all sampled population
+    //       cache_failed.insert(cand_states[i].ToStr());
+    //     }
+    //   }
+    // }
+
+    if (iter % 50 == 0) {
+      double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
+                            std::chrono::high_resolution_clock::now() - tic_begin)
+                            .count();
+      StdCout(verbose) << "Sample Iter: " << iter << std::fixed << std::setprecision(4)
+                       << "\t#Pop: " << out_states.size() << "\t#Target: " << sample_init_min_pop_
+                       << "\tCUDA view fail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
+                       << std::setprecision(2) << duration << std::endl;
+    }
+
+    if (unchange_cnt == 50) {
       // Reduce the target size to avoid too-long time in this phase if no valid state was found
       // in the past iterations
       if (sample_init_min_pop_ > 1) {

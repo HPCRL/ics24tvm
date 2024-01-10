@@ -123,6 +123,7 @@ class SketchPolicyNode : public SearchPolicyNode {
    * \return The generated sketches(states).
    */
   Array<State> GenerateSketches();
+  std::map<int, ConfigKey> GenerateUniquetable(SketchPolicyNode* policy, State* state, std::vector<splitMeta*> v_splitMeta_info);
   ConfigKey map_to_configkey(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
   int cur_config_len(std::unordered_map<std::string, std::vector<int>> current_config, std::vector<splitMeta*> v_splitMeta_info);
   std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
@@ -135,7 +136,7 @@ bool isConfigKeyInTable(int key) ;
    * \return The generated states (the initial population).
    */
   Array<State> SampleInitPopulation(const Array<State>& sketches);
-
+  Array<State> SampleCUDAInitPopulation(const Array<State>& sketches, int num_required);
   Array<State> SampleCUDAPopulation(const Array<State>& sketches, int num_required);
 
   std::vector<splitMeta*> GenerateSplitMeta(SketchPolicyNode* policy, State state);
