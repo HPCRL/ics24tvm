@@ -2147,7 +2147,14 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
         count_sampled = -1;
         return;
       }
-      next->push_back(start_states[*start_idx]);
+      // if no valid in start_states, re-sample
+      if ((*start_idx) > start_states.size() - 1) {
+        Array<State> tmp_start_states = SampleCUDAInitPopulation(sketch_cache_, 2);
+        next->push_back(tmp_start_states[0]);
+      }
+      else {
+        next->push_back(start_states[*start_idx]);
+      }
       count_sampled += 1;
       (*start_idx) += 1;
     }
