@@ -132,7 +132,10 @@ class SketchPolicyNode : public SearchPolicyNode {
   std::vector<ConfigKey> UpDownMutate(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
   std::vector<ConfigKey> MaskUpDownMutate(std::vector<int> mask, std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>> pz_factors, std::vector<splitMeta*> v_splitMeta_info);
 
-bool isConfigKeyInTable(int key) ;
+  Array<State> gen_neigbour_list(
+    State state, std::unordered_map<std::string, std::vector<int>> pz_factors,
+      Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info, int nhop);
+  bool isConfigKeyInTable(int key) ;
   /*!
    * \brief Sample the init population.
    * \param sketches The initial sketches for the sampled population
@@ -186,7 +189,7 @@ bool isConfigKeyInTable(int key) ;
   void NodeMove(Array<Array<State>> neighbour_table, std::vector<Array<State>*>  next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
     Array<MeasureInput>* total_inputs,
      Array<MeasureResult>* total_results,
-     int model_age, ProgramMeasurer measurer);
+     int model_age, ProgramMeasurer measurer, std::vector<splitMeta*> v_splitMeta_info);
   
   std::vector<ConfigKey> GetDirectNeighbors(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
