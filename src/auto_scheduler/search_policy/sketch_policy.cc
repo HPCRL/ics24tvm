@@ -288,7 +288,11 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     next_states.push_back(new Array<State>());
   }
   int start_idx = 0;
-  while (measured_states_throughputs_.size() < 1500) {
+  auto start_time = std::chrono::high_resolution_clock::now();  // init start time
+
+  while (measured_states_throughputs_.size() < 3000) {
+    auto current_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::minutes>(current_time - start_time);
     // // init next_states
     // create new predict based search
     SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, start_states, &start_idx, firsttime_random,
@@ -301,6 +305,10 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
     // TODO: if count_sampled hit end codition
     if (count_sampled == -1) {
+      break;
+    }
+    if (duration.count() > 15) {
+      std::cout << "Time limit exceeded. Terminating loop." << std::endl;
       break;
     }
 
