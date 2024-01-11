@@ -57,6 +57,9 @@ struct SketchParamKey {
   /*! \brief Retry several times if SearchOneRound gets no valid state. */
   static constexpr const char* empty_retry_count = "retry_search_one_round_on_empty";
 
+  // global_tolerant_threashold
+  static constexpr const char* tolerant_threashold = "tolerant_threashold";
+
   struct SampleInitPopulation {
     /*! \brief The minimal size of valid population in the initial sampling. */
     static constexpr const char* min_population = "sample_init_min_population";
@@ -176,7 +179,7 @@ bool isConfigKeyInTable(int key) ;
 
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  void SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, bool firsttime_random = false,  int* model_age = nullptr);
+  void SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, Array<State> start_states, int* start_idx, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
 
@@ -218,6 +221,7 @@ bool isConfigKeyInTable(int key) ;
   std::unordered_set<std::string> cache_failed;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
+  float global_tolerant_threashold;
 
   friend class SketchPolicy;
 };

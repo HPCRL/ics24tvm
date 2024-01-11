@@ -87,6 +87,8 @@ SketchPolicy::SketchPolicy(SearchTask task, CostModel program_cost_model,
   node->verbose = verbose;
   node->sample_init_min_pop_ =
       GetIntParam(node->params, SketchParamKey::SampleInitPopulation::min_population);
+  node->global_tolerant_threashold =
+      GetDoubleParam(node->params, SketchParamKey::tolerant_threashold);
 
   if (init_search_callbacks) {
     PrintTitle("Call init-search callbacks", verbose);
@@ -233,7 +235,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   int batch_size = 1;  // num of batch size
   int model_age = 0;
   count_sampled = 0;
-  int num_start = n_trials;
+  int num_start = 5;
+  Array<State> start_states;
 
   // generate a model based on random sampling and measure them
   if (ct == 0) {  // just run it at the first time
@@ -249,6 +252,17 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       // use xMeasure to avoid write into the json log
       results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
 
+      // push back the measured_states_throughputs_
+      for (const auto& res : results) {
+        measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
+      }
+
+      // sort and get the top 5 of the measured_states_vector_
+      auto indices = Argsort(measured_states_throughputs_);
+      for (int i = 0; i < num_start; i++) {
+        start_states.push_back(initStatesForModel[indices[i]]);
+      }      
+
       auto t_begin = std::chrono::high_resolution_clock::now();
 
       // Retrain the cost model before the next search round
@@ -260,13 +274,24 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     }
   }
 
+  assert(start_states.size() == num_start);
+
+  // printout the start_states for debug
+  for (auto state : start_states) {
+    std::cout << "start_states: " << state << std::endl;
+  }
+
+  std::cout << "@@@@start_states size: " << start_states.size() << std::endl;
+  std::cout << "global_tolerant_threashold: " << global_tolerant_threashold << std::endl;
+
   for (int i = 0; i < batch_size; i++) {
     next_states.push_back(new Array<State>());
   }
+  int start_idx = 0;
   while (measured_states_throughputs_.size() < 3000) {
     // // init next_states
     // create new predict based search
-    SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, firsttime_random,
+    SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, start_states, &start_idx, firsttime_random,
                               &model_age);
     // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
     // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
@@ -1469,7 +1494,7 @@ void SketchPolicyNode::NodeMove(
     }
 
     float base_score = pop_scores[0];
-    float tolerant_score = 0.6 * base_score;
+    float tolerant_score = global_tolerant_threashold * base_score;
     std::vector<float> neighbour_scores(pop_scores.begin() + 1, pop_scores.end());
     Array<State> loal_path_neighbors(local_path.begin() + 1, local_path.end());
     std::vector<int> indices = Argsort(neighbour_scores);
@@ -1842,7 +1867,7 @@ std::vector<int> computeSMTileSize(std::vector<int> reg_tile_factors){
 
 
 void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, ProgramMeasurer measurer,
-                                                 std::vector<Array<State>*> next_states, bool firsttime_random,
+                                                 std::vector<Array<State>*> next_states, Array<State> start_states, int* start_idx, bool firsttime_random,
                                                  int* model_age) {
   // PrintTitle("Search", verbose);
   // Generate sketches
@@ -1884,11 +1909,13 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
         count_sampled = -1;
         return;
       }
-      // std::cout << "next_states[" << idx++ << "] is empty" << std::endl;
-      auto tmp_pop = SampleCUDAInitPopulation(sketch_cache_, 2);
-      // push back to next_states[i]
-      next->push_back(tmp_pop[0]);
+      if ((*start_idx) > 4){
+        count_sampled = -1;
+        return;
+      }      
+      next->push_back(start_states[*start_idx]);
       count_sampled += 1;
+      (*start_idx) += 1;
     }
     init_population.push_back((*next)[0]);
   }
@@ -2885,6 +2912,7 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     if (!local_measured_states_set_.count(state_str)) {
       local_measured_states_set_.insert(
           std::move(state_str));  // just for remove dup, will clear later
+      measured_states_vector_.push_back(state);
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
