@@ -259,7 +259,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
       // sort and get the top 5 of the measured_states_vector_
       auto indices = Argsort(measured_states_throughputs_);
-      for (int i = 0; i < num_start; i++) {
+      for (int i = 0; i < std::min(static_cast<int>(indices.size()), num_start); i++) {
         start_states.push_back(initStatesForModel[indices[i]]);
       }      
 
@@ -288,7 +288,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     next_states.push_back(new Array<State>());
   }
   int start_idx = 0;
-  while (measured_states_throughputs_.size() < 3000) {
+  while (measured_states_throughputs_.size() < 1500) {
     // // init next_states
     // create new predict based search
     SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, start_states, &start_idx, firsttime_random,
@@ -2626,7 +2626,7 @@ Array<State> SketchPolicyNode::SampleCUDAInitPopulation(const Array<State>& sket
                        << std::setprecision(2) << duration << std::endl;
     }
 
-    if (unchange_cnt == 50) {
+    if (unchange_cnt == 20) {
       // Reduce the target size to avoid too-long time in this phase if no valid state was found
       // in the past iterations
       if (sample_init_min_pop_ > 1) {
