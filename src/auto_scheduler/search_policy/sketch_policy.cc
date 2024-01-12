@@ -419,6 +419,7 @@ void generatePermutations(const std::unordered_map<int, Array<Array<Integer>>>& 
 ConfigKey SketchPolicyNode::map_to_configkey(
     std::unordered_map<std::string, std::vector<int>> current_config,
     std::vector<splitMeta*> v_splitMeta_info) {
+  // validated correct for more level tiling
   State state = sketch_cache_[0];
   const State& init_state = this->search_task->compute_dag->init_state;
   std::map<int, int> stage_itr_offset;
@@ -484,11 +485,20 @@ ConfigKey SketchPolicyNode::map_to_configkey(
     // }
   }
 
+  // //print config_key
+  // std::cout << "config_key: " << std::endl;
+  // for (auto it = config_key.begin(); it != config_key.end(); ++it) {
+  //   std::cout << *it << " ";
+  // }
+  // std::cout << "function map_to_configkey done" << std::endl;
+  // exit(-1);
+
   return config_key;
 }
 
 std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetStateFactor(
     const SearchTask& task, const State& state) {
+  // validated correct for more level tiling 
   std::vector<splitMeta*> v_splitMeta_info;
   v_splitMeta_info = GenerateSplitMeta(this, state);
   State ret_state;
@@ -606,22 +616,37 @@ std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetStateFact
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
       std::vector<int> tile_conf;
-      int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
+      int reg1 = spm->tile_sizes[1] * spm->tile_sizes[3];
+      int reg2 = spm->tile_sizes[4];
       int tb = spm->tile_sizes[2];
-      tile_conf.push_back(static_cast<int>(reg));
+      tile_conf.push_back(static_cast<int>(reg1));
+      tile_conf.push_back(static_cast<int>(reg2));
       tile_conf.push_back(static_cast<int>(tb));
       current_config[spm->origin_itr->name] = tile_conf;
     } else {
       int inner_outer = spm->tile_sizes[1];
+      int inner_inner = spm->tile_sizes[2];
       std::vector<int> tile_conf;
       tile_conf.push_back(static_cast<int>(inner_outer));
-      tile_conf.push_back(1);
+      tile_conf.push_back(inner_inner);
       current_config[spm->origin_itr->name] = tile_conf;
     }
     // if (spm == v_splitMeta_info.end()[-1]) {
     //   continue;
     // }
   }
+
+  // //print current_config
+  // std::cout << "current_config: " << std::endl;
+  // for (auto it = current_config.begin(); it != current_config.end(); ++it) {
+  //   std::cout << it->first << ": ";
+  //   for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+  //     std::cout << *it2 << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
+  // std::cout << "function getstatefactor done" << std::endl;
+  // exit(-1);
   return current_config;
 }
 
@@ -641,18 +666,20 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
       auto dim_name = sm->origin_itr->name;
       auto pz = sm->problem_size;
-      auto reg = current_config[dim_name][0];
-      auto tb = current_config[dim_name][1];
+      auto reg1 = current_config[dim_name][0];
+      auto reg2 = current_config[dim_name][1];
+      auto tb = current_config[dim_name][2];
 
       //remap to our inclusive tile size
       // find the index of tb and reg in pz_factors
-      tb = tb * reg;
+      tb = tb * reg1 * reg2;
 
-      auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+      auto reg1_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg1);
+      auto reg2_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg2);
       auto tb_index = std::find(pz_factors[dim_name+"_sm"].begin(), pz_factors[dim_name+"_sm"].end(), tb);
 
       // if not found in pz_factors, then continue
-      if (reg_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
+      if (reg1_index == pz_factors[dim_name].end() || reg2_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
         continue;
       }
 
@@ -664,11 +691,11 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         // auto up_tb = tmp.at(up_tb_index - pz_factors[dim_name].begin());
         auto up_tb = pz_factors[dim_name+"_sm"].at(up_tb_index - pz_factors[dim_name+"_sm"].begin());
         // valid
-        if (up_tb >= reg) {
+        if (up_tb >= reg1 * reg2) {
           // std::cout << "up_tb: " << up_tb << std::endl;
-          tmp_config[dim_name][1] = up_tb/reg;
+          tmp_config[dim_name][2] = up_tb/reg1/reg2;
           // pz must can be divided by tb*reg
-          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+          if (pz % (tmp_config[dim_name][1] * reg1 * reg2) == 0) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
@@ -680,45 +707,83 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
         auto down_tb_index = tb_index - 1;
         auto down_tb = pz_factors[dim_name+"_sm"].at(down_tb_index - pz_factors[dim_name+"_sm"].begin());
         // valid
-        if (down_tb >= reg ) {
+        if (down_tb >= reg1 * reg2) {
           // std::cout << "down_tb: " << down_tb << std::endl;
-          tmp_config[dim_name][1] = down_tb/reg;
+          tmp_config[dim_name][2] = down_tb/reg1/reg2;
           // pz must can be divided by tb*reg
-          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+          if (pz % (tmp_config[dim_name][1] * reg1 * reg2) == 0) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
         }
       }
 
-      // up for reg
-      if (reg_index != pz_factors[dim_name].end() - 1) {
+      // up for reg1
+      if (reg1_index != pz_factors[dim_name].end() - 1) {
         tmp_config = current_config;
-        auto up_reg_index = reg_index + 1;
+        auto local_tb = tmp_config[dim_name][2];
+        auto up_reg_index = reg1_index + 1;
         auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
         // valid
-        if (up_reg <= tb) {
+        if (up_reg * reg2 <= tb) {
           // std::cout << "up_reg: " << up_reg << "for dimname " << dim_name << std::endl;
           tmp_config[dim_name][0] = up_reg;
           // pz must can be divided by tb*reg
-          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+          if (pz % (up_reg * reg2 * local_tb) == 0 && pz >= up_reg * reg2 * local_tb) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
         }
       }
 
-      // down for reg
-      if (reg_index != pz_factors[dim_name].begin()) {
+      // down for reg1
+      if (reg1_index != pz_factors[dim_name].begin()) {
         tmp_config = current_config;
-        auto down_reg_index = reg_index - 1;
+        auto local_tb = tmp_config[dim_name][2];
+        auto down_reg_index = reg1_index - 1;
         auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
         // valid
         if (down_reg <= tb) {
           // std::cout << "down_reg: " << down_reg << std::endl;
           tmp_config[dim_name][0] = down_reg;
           // pz must can be divided by tb*reg
-          if (pz % (tmp_config[dim_name][1] * tmp_config[dim_name][0]) == 0) {
+          if (pz % (down_reg * reg2 * local_tb) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
+        }
+      }
+
+      // up for reg2 
+      if (reg2_index != pz_factors[dim_name].end() - 1) {
+        tmp_config = current_config;
+        auto local_tb = tmp_config[dim_name][2];
+        auto up_reg_index = reg2_index + 1;
+        auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
+        // valid
+        if (up_reg * reg1 <= tb) {
+          // std::cout << "up_reg: " << up_reg << "for dimname " << dim_name << std::endl;
+          tmp_config[dim_name][1] = up_reg;
+          // pz must can be divided by tb*reg
+          if (pz % (up_reg * reg1 * local_tb) == 0 && pz >= up_reg * reg1 * local_tb) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
+        }
+      }
+
+      // down for reg2
+      if (reg2_index != pz_factors[dim_name].begin()) {
+        tmp_config = current_config;
+        auto local_tb = tmp_config[dim_name][2];
+        auto down_reg_index = reg2_index - 1;
+        auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
+        // valid
+        if (down_reg <= tb) {
+          // std::cout << "down_reg: " << down_reg << std::endl;
+          tmp_config[dim_name][1] = down_reg;
+          // pz must can be divided by tb*reg
+          if (pz % (down_reg * reg1 * local_tb) == 0) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
@@ -727,42 +792,78 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
     } else {
       auto dim_name = sm->origin_itr->name;
       auto pz = sm->problem_size;
-      auto inner_inner = current_config[dim_name][0];
+      auto inner_outer = current_config[dim_name][0];
+      auto inner_inner = current_config[dim_name][1];
       // std::cout << "inner_inner: " << inner_inner << std::endl;
 
-      auto idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+      auto inner_outer_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_outer);
+      auto inner_inner_idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
 
-      // up
-      if (idx != pz_factors[dim_name].end() - 1) {
+      // up inner_outer
+      if (inner_outer_index != pz_factors[dim_name].end() - 1) {
         tmp_config = current_config;
-        auto up_idx = idx + 1;
-        auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
+        auto up_idx = inner_outer_index + 1;
+        auto up_inner_outer = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
         // valid
-        if (up_inner_inner <= pz && up_inner_inner <= max_innermost_split_factor) {
-          // std::cout << "up_inner_inner: " << up_inner_inner << "for dimname " << dim_name << std::endl;
-          tmp_config[dim_name][0] = up_inner_inner;
+        if (up_inner_outer * inner_inner <= pz) {
+          // std::cout << "up_inner_outer: " << up_inner_outer << "for dimname " << dim_name << std::endl;
+          tmp_config[dim_name][0] = up_inner_outer;
           // pz must can be divided by tb*reg
-          if (pz % tmp_config[dim_name][0] == 0) {
+          if (pz % (up_inner_outer * inner_inner) == 0) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
         }
       }
-      // down
-      if (idx != pz_factors[dim_name].begin()) {
+
+      // down inner_outer
+      if (inner_outer_index != pz_factors[dim_name].begin()) {
         tmp_config = current_config;
-        auto down_idx = idx - 1;
+        auto down_idx = inner_outer_index - 1;
+        auto down_inner_outer = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
+        // valid
+        if (down_inner_outer <= pz) {
+          // std::cout << "down_inner_outer: " << down_inner_outer << "for dimname " << dim_name << std::endl;
+          tmp_config[dim_name][0] = down_inner_outer;
+          if (pz % (down_inner_outer * inner_inner) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
+        }
+      }
+
+      // up inner_inner
+      if (inner_inner_idx != pz_factors[dim_name].end() - 1) {
+        tmp_config = current_config;
+        auto up_idx = inner_inner_idx + 1;
+        auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
+        // valid
+        if (up_inner_inner * inner_outer <= pz) {
+          // std::cout << "up_inner_inner: " << up_inner_inner << "for dimname " << dim_name << std::endl;
+          tmp_config[dim_name][1] = up_inner_inner;
+          // pz must can be divided by tb*reg
+          if (pz % (up_inner_inner * inner_outer) == 0) {
+            ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
+            neighbors_config_key.push_back(config_key);
+          }
+        }
+      }
+      // down inner_inner
+      if (inner_inner_idx != pz_factors[dim_name].begin()) {
+        tmp_config = current_config;
+        auto down_idx = inner_inner_idx - 1;
         auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
         // valid
         if (down_inner_inner <= pz) {
           // std::cout << "down_inner_inner: " << down_inner_inner << "for dimname " << dim_name << std::endl;
-          tmp_config[dim_name][0] = down_inner_inner;
-          if (pz % tmp_config[dim_name][0] == 0) {
+          tmp_config[dim_name][1] = down_inner_inner;
+          if (pz % (down_inner_inner * inner_outer) == 0) {
             ConfigKey config_key = map_to_configkey(tmp_config, v_splitMeta_info);
             neighbors_config_key.push_back(config_key);
           }
         }
       }
+
     }
   }
   return neighbors_config_key;
@@ -775,6 +876,7 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
     std::unordered_map<std::string, std::vector<int>> current_config,
     std::unordered_map<std::string, std::vector<int>> pz_factors,
     std::vector<splitMeta*> v_splitMeta_info) {
+  // validated correct for more level tiling
   std::vector<ConfigKey> neighbors_config_key;
   ConfigKey mutated_config_key;
   //generate the change map
@@ -784,22 +886,27 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   for (auto sm : v_splitMeta_info) {
     if (sm->parallel) {
       auto dim_name = sm->origin_itr->name;
-      auto reg_change_mask = mask[i];
-      auto tb_change_mask = mask[i+1];
+      auto reg1_change_mask = mask[i];
+      auto reg2_change_mask = mask[i+1];
+      auto tb_change_mask = mask[i+2];
       // std::cout << "dime: " << dim_name << " tb_change_mask: " << tb_change_mask << " reg_change_mask: " << reg_change_mask << std::endl;
       std::vector<int> tmp;
+      tmp.push_back(reg1_change_mask);
+      tmp.push_back(reg2_change_mask);
       tmp.push_back(tb_change_mask);
-      tmp.push_back(reg_change_mask);
+
       change_map[dim_name] = tmp;
-      i += 2;
+      i += 3;
     } else {
       auto dim_name = sm->origin_itr->name;
-      auto inner_inner_change_mask = mask[i];
+      auto inner_outer_change_mask = mask[i];
+      auto inner_inner_change_mask = mask[i+1];
       //  std::cout << "dime: " << dim_name << " inner_inner_change_mask: " << inner_inner_change_mask << std::endl;
       std::vector<int> tmp;
+      tmp.push_back(inner_outer_change_mask);
       tmp.push_back(inner_inner_change_mask);
       change_map[dim_name] = tmp;      
-      i += 1;
+      i += 2;
     }
   }
 
@@ -813,21 +920,24 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
       auto dim_name = sm->origin_itr->name;
       auto pz = sm->problem_size;
-      auto reg = current_config[dim_name][0];
-      auto tb = current_config[dim_name][1];
+      auto reg1 = current_config[dim_name][0];
+      auto reg2 = current_config[dim_name][1];
+      auto tb = current_config[dim_name][2];
 
-      auto tb_change_mask = change_map[dim_name][0];
-      auto reg_change_mask = change_map[dim_name][1];
+      auto reg1_change_mask = change_map[dim_name][0];
+      auto reg2_change_mask = change_map[dim_name][1];
+      auto tb_change_mask = change_map[dim_name][2];
       
       //remap to our inclusive tile size
       // find the index of tb and reg in pz_factors
-      tb = tb * reg;
+      tb = tb * reg1 * reg2;
 
-      auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+      auto reg1_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg1);
+      auto reg2_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg2);
       auto tb_index = std::find(pz_factors[dim_name+"_sm"].begin(), pz_factors[dim_name+"_sm"].end(), tb);
 
       // if not found in pz_factors, then continue
-      if (reg_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
+      if (reg1_index == pz_factors[dim_name].end() || reg2_index == pz_factors[dim_name].end() || tb_index == pz_factors[dim_name+"_sm"].end()) {
         continue;
       }
 
@@ -836,8 +946,8 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
         if (tb_index != pz_factors[dim_name+"_sm"].end() - 1) {
           auto up_tb_index = tb_index + 1;
           auto up_tb = pz_factors[dim_name+"_sm"].at(up_tb_index - pz_factors[dim_name+"_sm"].begin());
-          if (up_tb >= reg) {
-            tmp_config[dim_name][1] = up_tb/reg;
+          if (up_tb >= reg1 * reg2) {
+            tmp_config[dim_name][2] = up_tb/reg1/reg2;
           }
         }
       }
@@ -846,28 +956,45 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
         if (tb_index != pz_factors[dim_name+"_sm"].begin()) {
           auto down_tb_index = tb_index - 1;
           auto down_tb = pz_factors[dim_name+"_sm"].at(down_tb_index - pz_factors[dim_name+"_sm"].begin());
-          if (down_tb >= reg ) {
-            tmp_config[dim_name][1] = down_tb/reg;
+          if (down_tb >= reg1 * reg2) {
+            tmp_config[dim_name][2] = down_tb/reg1/reg2;
           }
         }
       }
 
-      if (reg_change_mask == 1){
+      if (reg1_change_mask == 1){
         // up for reg
-        if (reg_index != pz_factors[dim_name].end() - 1) {
-          auto up_reg_index = reg_index + 1;
+        if (reg1_index != pz_factors[dim_name].end() - 1) {
+          auto up_reg_index = reg1_index + 1;
           auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
           tmp_config[dim_name][0] = up_reg;
         }
-      } else if (reg_change_mask == -1) {
+      } else if (reg1_change_mask == -1) {
         // down for reg
-        if (reg_index != pz_factors[dim_name].begin()) {
-          auto down_reg_index = reg_index - 1;
+        if (reg1_index != pz_factors[dim_name].begin()) {
+          auto down_reg_index = reg1_index - 1;
           auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
           tmp_config[dim_name][0] = down_reg;
         }
       }
-      int new_reg = tmp_config[dim_name][0];
+
+      if (reg2_change_mask == 1){
+        // up for reg
+        if (reg2_index != pz_factors[dim_name].end() - 1) {
+          auto up_reg_index = reg2_index + 1;
+          auto up_reg = pz_factors[dim_name].at(up_reg_index - pz_factors[dim_name].begin());
+          tmp_config[dim_name][1] = up_reg;
+        }
+      } else if (reg2_change_mask == -1) {
+        // down for reg
+        if (reg2_index != pz_factors[dim_name].begin()) {
+          auto down_reg_index = reg2_index - 1;
+          auto down_reg = pz_factors[dim_name].at(down_reg_index - pz_factors[dim_name].begin());
+          tmp_config[dim_name][1] = down_reg;
+        }
+      }
+
+      int new_reg = tmp_config[dim_name][0] * tmp_config[dim_name][1];
       if (tb < new_reg) {
         is_valid = false;
         break;
@@ -875,9 +1002,12 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
     } else {
       auto dim_name = sm->origin_itr->name;
       auto pz = sm->problem_size;
-      auto inner_inner = current_config[dim_name][0];
+      auto inner_outer = current_config[dim_name][0];
+      auto inner_inner = current_config[dim_name][1];
       // std::cout << "inner_inner: " << inner_inner << std::endl;
-      auto inner_inner_change_mask = change_map[dim_name][0];
+      auto inner_outer_change_mask = change_map[dim_name][0];
+      auto inner_inner_change_mask = change_map[dim_name][1];
+
       // std::cout << "dime: " << dim_name << " inner_inner_change_mask: " << inner_inner_change_mask << std::endl;
       // std::cout << "pz: " << pz << ", inner_inner: " << inner_inner << std::endl;
       // std::cout << "pz factors: " << std::endl;
@@ -885,22 +1015,40 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
       //   std::cout << v << " ";
       // }
 
-      auto idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+      auto inner_outer_idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_outer);
+      auto inner_inner_idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+
+
+      if (inner_outer_change_mask == 1){
+        // up
+        if (inner_outer_idx != pz_factors[dim_name].end() - 1) {
+          auto up_idx = inner_outer_idx + 1;
+          auto up_inner_outer = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
+          tmp_config[dim_name][0] = up_inner_outer;
+        }
+      } else if (inner_outer_change_mask == -1) {
+        // down
+        if (inner_outer_idx != pz_factors[dim_name].begin()) {
+          auto down_idx = inner_outer_idx - 1;
+          auto down_inner_outer = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
+          tmp_config[dim_name][0] = down_inner_outer;
+        }
+      }
 
       if (inner_inner_change_mask == 1){
         // up
-        if (idx != pz_factors[dim_name].end() - 1) {
-          auto up_idx = idx + 1;
+        if (inner_inner_idx != pz_factors[dim_name].end() - 1) {
+          auto up_idx = inner_inner_idx + 1;
           auto up_inner_inner = pz_factors[dim_name].at(up_idx - pz_factors[dim_name].begin());
           
-          tmp_config[dim_name][0] = up_inner_inner;
+          tmp_config[dim_name][1] = up_inner_inner;
         }
       } else if (inner_inner_change_mask == -1) {
         // down
-        if (idx != pz_factors[dim_name].begin()) {
-          auto down_idx = idx - 1;
+        if (inner_inner_idx != pz_factors[dim_name].begin()) {
+          auto down_idx = inner_inner_idx - 1;
           auto down_inner_inner = pz_factors[dim_name].at(down_idx - pz_factors[dim_name].begin());
-          tmp_config[dim_name][0] = down_inner_inner;
+          tmp_config[dim_name][1] = down_inner_inner;
         }
       }
     }
@@ -972,10 +1120,18 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   //   std::cout << std::endl;
   // }
   
+  // // print mask
+  // std::cout << "\n---------" << std::endl;
+
+  // std::cout << "mask: " << std::endl;
+  // for (auto& m : mask) {
+  //   std::cout << m << "\t";
+  // }
 
   // std::cout << "\n---------" << std::endl;
   // ConfigKey current_config_key = map_to_configkey(current_config, v_splitMeta_info);
-  // std::cout << "TBnn\tRegnn\tTBff\tRegff\tTByy\tRegyy\tTBxx\tRegxx\tRc\t1\tRy\t1\tRx\t1: " << std::endl;
+  // // std::cout << "TBnn\tRegnn\tTBff\tRegff\tTByy\tRegyy\tTBxx\tRegxx\tRc\t1\tRy\t1\tRx\t1: " << std::endl;
+  // std::cout << "reg1\treg2\ttb\treg1\treg2\ttb\treg1\treg2\ttb\treg1\treg2\ttb\touter\tinner\touter\tinner\touter\tinner" << std::endl;
   // std::cout << "current_config_key: " << std::endl;
   // for (auto& c : current_config_key) {
   //   std::cout << c << "\t";
@@ -992,6 +1148,7 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   //   std::cout << std::endl;
   // }
   // std::cout << "neighbors_config_key size: " << neighbors_config_key.size() << std::endl;
+  // exit(-1);
   return neighbors_config_key;
 }
 
@@ -1030,6 +1187,7 @@ std::vector<ConfigKey> SketchPolicyNode::GetDirectNeighbors(
 
 std::unordered_map<std::string, std::vector<int>> ConfigKey2Map(
     const ConfigKey& conf, std::vector<splitMeta*> v_splitMeta_info) {
+  // validated correct for more level tiling
   std::unordered_map<std::string, std::vector<int>> res;
   int idx = 0;
   for (auto& sm : v_splitMeta_info) {
@@ -1037,10 +1195,11 @@ std::unordered_map<std::string, std::vector<int>> ConfigKey2Map(
     if (sm->parallel) {
       tmp.push_back(conf[idx]);
       tmp.push_back(conf[idx + 1]);
-      idx += 2;
+      tmp.push_back(conf[idx + 2]);
+      idx += 3;
     } else {
       tmp.push_back(conf[idx]);
-      tmp.push_back(1);
+      tmp.push_back(conf[idx + 1]);
       idx += 2;
     }
     res[sm->origin_itr->name] = tmp;
@@ -1056,6 +1215,8 @@ std::unordered_map<std::string, std::vector<int>> ConfigKey2Map(
   //     }
   //     std::cout << std::endl;
   // }
+  // std::cout << "ConfigKey2Map done" << std::endl;
+  // exit(-1);
   return res;
 }
 
@@ -1115,14 +1276,16 @@ std::vector<int> getExcludedDims(
         if (pz == 1) {
           excluded_dims.push_back(i);
           excluded_dims.push_back(i+1);
+          excluded_dims.push_back(i+2);
         }
-        i += 2;
+        i += 3;
       } else {
         int pz = sm->problem_size;
         if (pz == 1) {
           excluded_dims.push_back(i);
+          excluded_dims.push_back(i+1);
         }
-        i += 1;
+        i += 2;
       }
     }
     // std::cout << "excluded_dims: " << std::endl;
@@ -1135,15 +1298,18 @@ std::vector<int> getExcludedDims(
 int SketchPolicyNode::cur_config_len(
     std::unordered_map<std::string, std::vector<int>> current_config,
     std::vector<splitMeta*> v_splitMeta_info) {
+  // validated correct for more level tiling
   int i = 0;
   for (auto sm : v_splitMeta_info) {
     // std::cout << "current_config: \n" << std::endl;
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
-      i += 2;
+      i += 3;
     } else {
-      i += 1;
+      i += 2;
     }
   }
+  // std::cout << "cur_config_len: " << i << std::endl;
+  // exit(-1);
   return i;
 }
 
@@ -1335,14 +1501,20 @@ ConfigKey SketchPolicyNode::RandomMutate(
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
       auto dim_name = sm->origin_itr->name;
       // auto pz = sm->problem_size;
-      auto reg = current_config[dim_name][0];
-      auto tb = current_config[dim_name][1];
+      auto reg1 = current_config[dim_name][0];
+      auto reg2 = current_config[dim_name][1];
+      auto tb = current_config[dim_name][2];
 
       // find the index of tb and reg in pz_factors
+      auto reg1_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg1);
+      auto reg2_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg2);
       auto tb_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), tb);
-      auto reg_index = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), reg);
+
+      cur_config_index.push_back(reg1_index - pz_factors[dim_name].begin());
+      cur_config_index.push_back(reg2_index - pz_factors[dim_name].begin());
       cur_config_index.push_back(tb_index - pz_factors[dim_name].begin());
-      cur_config_index.push_back(reg_index - pz_factors[dim_name].begin());
+      mask_id_name_map[i] = dim_name;
+      i += 1;
       mask_id_name_map[i] = dim_name;
       i += 1;
       mask_id_name_map[i] = dim_name;
@@ -1351,11 +1523,16 @@ ConfigKey SketchPolicyNode::RandomMutate(
     } else {
       auto dim_name = sm->origin_itr->name;
       // auto pz = sm->problem_size;
-      auto inner_inner = current_config[dim_name][0];
-      // std::cout << "inner_inner: " << inner_inner << std::endl;
+      auto inner_outer = current_config[dim_name][0];
+      auto inner_inner = current_config[dim_name][1];
 
-      auto idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
-      cur_config_index.push_back(idx - pz_factors[dim_name].begin());
+      auto inner_outer_idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_outer);
+      auto inner_inner_idx = std::find(pz_factors[dim_name].begin(), pz_factors[dim_name].end(), inner_inner);
+
+      cur_config_index.push_back(inner_outer_idx - pz_factors[dim_name].begin());
+      cur_config_index.push_back(inner_inner_idx - pz_factors[dim_name].begin());
+      mask_id_name_map[i] = dim_name;
+      i += 1;
       mask_id_name_map[i] = dim_name;
       i += 1;
     }
@@ -1426,18 +1603,21 @@ ConfigKey SketchPolicyNode::RandomMutate(
       if (sm->parallel) {
         auto name = sm->origin_itr->name;
         auto pz = sm->problem_size;
-        int tb = next_config_key[ite_config_key];
-        int reg = next_config_key[ite_config_key + 1];
-        if (tb * reg > pz) {
+        int reg1 = next_config_key[ite_config_key];
+        int reg2 = next_config_key[ite_config_key+1];
+        int tb = next_config_key[ite_config_key+2];
+        
+        if (tb * reg1 * reg2 > pz) {
           valid_config = false;
           break;
         }
-        ite_config_key += 2;
+        ite_config_key += 3;
       } else {
         auto name = sm->origin_itr->name;
         auto pz = sm->problem_size;
-        int inner_inner = next_config_key[ite_config_key];
-        if (inner_inner > pz) {
+        int inner_outer = next_config_key[ite_config_key];
+        int inner_inner = next_config_key[ite_config_key+1];
+        if (inner_inner * inner_outer > pz) {
           valid_config = false;
           break;
         }
@@ -1476,7 +1656,7 @@ Array<State> SketchPolicyNode::gen_neigbour_list(
 
   // get mask then call mask updown mutate
   int total_dims = cur_config_len(current_base, v_splitMeta_info);
-  // std::cout << "total_dims: " << total_dims << std::endl;
+  std::cout << "total_dims: " << total_dims << std::endl;
   int num_hops = nhop;
   std::vector<int> exclude_dims = getExcludedDims(current_base, v_splitMeta_info, total_dims);
 
@@ -2973,6 +3153,7 @@ Array<MeasureInput> SketchPolicyNode::PickStatesWithEpsGreedy(const Array<State>
 std::string SketchPolicyNode::state_to_string(const State& state,
                                               std::vector<splitMeta*> v_splitMeta_info,
                                               const SearchTask& task) {
+  // validated correctness for more tiling size
   State ret_state;
   StateNode* pstate;
 
@@ -3096,31 +3277,31 @@ std::string SketchPolicyNode::state_to_string(const State& state,
   std::string res = "";
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
-      int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
+      int reg1 = spm->tile_sizes[1] * spm->tile_sizes[3];
+      int reg2 = spm->tile_sizes[4];
       int tb = spm->tile_sizes[2];
-      int grid = spm->tile_sizes[0];
-      // std::cout << "reg = " << reg << " tb = " << tb << " grid = " << grid << std::endl;
 
-      // append name+Grid+TB+reg
-      res += spm->origin_itr->name + "_Grid" + std::to_string(grid) + "_TB" + std::to_string(tb) +
-             "_reg" + std::to_string(reg);
+      // append 
+      res += "reg1_" + std::to_string(reg1) + "_reg2_" + std::to_string(reg2) + "_tb_" +
+             std::to_string(tb) + "_";
 
     } else {
-      int outer_SM = spm->tile_sizes[0];
       int inner_outer = spm->tile_sizes[1];
       int inner_inner = spm->tile_sizes[2];
       // std::cout << "outer_SM = " << outer_SM << " inner_outer = " << inner_outer << " inner_inner
       // = " << inner_inner << std::endl;
 
-      res += spm->origin_itr->name + "_outer_SM" + std::to_string(outer_SM) + "_inner_outer" +
-             std::to_string(inner_outer) + "_inner_inner" + std::to_string(inner_inner);
+      res += "inner_outer_" + std::to_string(inner_outer) + "_inner_inner_" +
+             std::to_string(inner_inner) + "_";
     }
     // if (spm == v_splitMeta_info.end()[-1]) {
     //   continue;
     // }
   }
-  // std::cout << "res = " << res << std::endl;
   // std::cout << "its state\n" << state << std::endl;
+  // print res
+  // std::cout << "res = " << res << std::endl;
+  // exit(-1);
   return res;
 }
 

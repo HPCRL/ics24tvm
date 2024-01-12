@@ -551,17 +551,21 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
       // parallel loop dim
       // reg = tile_sizes[0] spm->tile_sizes[2]  spm->tile_sizes[3] << std::endl;
       // # th = tile_sizes[1] 
-      Integer reg_tile = tile_config[conf_offset];
-      Integer num_thread = tile_config[conf_offset+1];
+      Integer reg_tile1 = tile_config[conf_offset];
+      Integer reg_tile2 = tile_config[conf_offset+1];
+      Integer num_thread = tile_config[conf_offset+2];
+
       ////std::cout << "num_thread: " << num_thread << " reg_tile: " << reg_tile << std::endl;
       candidate_lengths.push_back(1);
       candidate_lengths.push_back(num_thread);
-      candidate_lengths.push_back(reg_tile);
-      candidate_lengths.push_back(1);
+      candidate_lengths.push_back(reg_tile1);
+      candidate_lengths.push_back(reg_tile2);
       // //std::cout << "candidate_lengths: " << candidate_lengths << std::endl;
       // for (auto len : candidate_lengths){
       //   //std::cout << len << " ";
       // }
+  
+      i+=3;
     }
     else if (ps->lengths.size() == 2){
       // reduction loop dim
@@ -574,6 +578,8 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
       // for (auto len : candidate_lengths){
       //   //std::cout << len << " ";
       // }
+  
+      i+=2;
     }
     // //std::cout << "InitFillTileSizeUnique  " << step_id << std::endl;
     // //std::cout << "InitFillTileSizeUnique  candidate_lengths" << candidate_lengths << std::endl;
@@ -587,8 +593,6 @@ PopulationGenerationRule::ResultKind InitFillTileSizeUnique::Apply_unique(Sketch
                     Array<Optional<Integer>>(candidate_lengths.begin(), candidate_lengths.end()),
                     ps->inner_to_outer));
 
-  
-    i+=2;
   }
   pstate->concrete = true;
   ////std::cout << "pstate : \n" << *state << std::endl;
