@@ -1779,6 +1779,18 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
     Array<State> loal_path_neighbors(local_path.begin() + 1, local_path.end());
     std::vector<int> indices = Argsort(neighbour_scores);
 
+    // sort to get global best from measured_states_throughputs_
+    // std::vector<int> indices_gflops = Argsort(measured_states_throughputs_);
+    // float global_best_gflops = measured_states_throughputs_[indices_gflops[0]];
+
+    // iterate to get global best from gflops_map_
+    float global_best_gflops = std::numeric_limits<float>::min();
+    for (const auto& pair : gflops_map_) {
+        if (pair.second > global_best_gflops) {
+            global_best_gflops = pair.second;
+        }
+    }
+
     int window_size = 3;
 
     int max_idx = -1;
@@ -1873,13 +1885,22 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
       // }
 
       float max_flops = base_state_gflops;
+      float max_gflops_in_window = 0;
       for (size_t i = 0; i < neighbor_gflops.size(); i++) {
         if (neighbor_gflops[i] > max_flops) {
           max_flops = neighbor_gflops[i];
           max_idx = i;
         }
+        if (neighbor_gflops[i] > max_gflops_in_window) {
+          max_gflops_in_window = neighbor_gflops[i];
+        }
       }
-
+      
+      // global best threshold for this window, early stop if no neighbor is better than this threshold
+      if (window_start >= 9 && max_gflops_in_window < global_best_gflops * 0.6) {
+        // std::cout << "global best threshold early stopped" << std::endl;
+        break;
+      }
 
       if (max_idx != -1) {// possible moving, check if visited
         // std::cout << "max_idx = " << max_idx << std::endl;
@@ -2031,12 +2052,23 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
         //   std::cout << j++ << ": " << w << std::endl;
         // }
 
+        
         float max_flops = base_state_gflops;
+        float max_gflops_in_window = 0;
         for (size_t i = 0; i < neighbor_gflops.size(); i++) {
           if (neighbor_gflops[i] > max_flops) {
             max_flops = neighbor_gflops[i];
             max_idx = i;
           }
+          if (neighbor_gflops[i] > max_gflops_in_window) {
+            max_gflops_in_window = neighbor_gflops[i];
+          }
+        }
+        
+        // global best threshold for this window, early stop if no neighbor is better than this threshold
+        if (window_start >= 9 && max_gflops_in_window < global_best_gflops * 0.6) {
+          // std::cout << "global best threshold early stopped" << std::endl;
+          break;
         }
 
         if (max_idx != -1) {// possible moving, check if visited
