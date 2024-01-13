@@ -1665,7 +1665,7 @@ Array<State> SketchPolicyNode::gen_neigbour_list(
 
   // get mask then call mask updown mutate
   int total_dims = cur_config_len(current_base, v_splitMeta_info);
-  std::cout << "total_dims: " << total_dims << std::endl;
+  // std::cout << "total_dims: " << total_dims << std::endl;
   int num_hops = nhop;
   std::vector<int> exclude_dims = getExcludedDims(current_base, v_splitMeta_info, total_dims);
 
@@ -1787,17 +1787,17 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
     // std::cout << "topn = " << topn << std::endl;
 
     while (max_idx == -1 && window_start + topn <= static_cast<int>(loal_path_neighbors.size())) {
-      std::cout << "1+2 hop neighbors size: " << loal_path_neighbors.size() << std::endl;
-      std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
-      std::cout << "window_start = " << window_start << std::endl;
-      std::cout << "topn = " << topn << std::endl;
-      std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
+      // std::cout << "1+2 hop neighbors size: " << loal_path_neighbors.size() << std::endl;
+      // std::cout << "loal_path_neighbors.size() = " << loal_path_neighbors.size() << std::endl;
+      // std::cout << "window_start = " << window_start << std::endl;
+      // std::cout << "topn = " << topn << std::endl;
+      // std::cout << "idx start from " << window_start << " to " << window_start + topn << std::endl;
 
       // tolerant_score threshold
       if (tolerant_score > neighbour_scores[indices[window_start]] ||
           neighbour_scores[indices[window_start]] < 0 || topn == 0) {
-        std::cout << "tolerance threshold early stopped" << std::endl;
-        std::cout << "tolerant_score = " << tolerant_score << std::endl;
+        // std::cout << "tolerance threshold early stopped" << std::endl;
+        // std::cout << "tolerant_score = " << tolerant_score << std::endl;
         break;
       }
 
@@ -1842,7 +1842,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
       }
 
       // now we have not_measured_states, we need to measure them
-      std::cout << "not_measured_states.size() = " << not_measured_states.size() << std::endl;
+      // std::cout << "not_measured_states.size() = " << not_measured_states.size() << std::endl;
       Array<MeasureInput> inputs = PackState(not_measured_states, not_measured_states.size());
       Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                         inputs, not_measured_scores, model_age);
@@ -1865,12 +1865,12 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
         neighbor_gflops[not_measured_states_map[state_str]] = gflops_map_[state_str];
       }
 
-      std::cout << "base_state_gflops = " << base_state_gflops << std::endl;
-      std::cout << "neighbor_gflops: " << std::endl;
-      int j = 0;
-      for (auto& w : neighbor_gflops) {
-        std::cout << j++ << ": " << w << std::endl;
-      }
+      // std::cout << "base_state_gflops = " << base_state_gflops << std::endl;
+      // std::cout << "neighbor_gflops: " << std::endl;
+      // int j = 0;
+      // for (auto& w : neighbor_gflops) {
+      //   std::cout << j++ << ": " << w << std::endl;
+      // }
 
       float max_flops = base_state_gflops;
       for (size_t i = 0; i < neighbor_gflops.size(); i++) {
@@ -1882,13 +1882,13 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
 
 
       if (max_idx != -1) {// possible moving, check if visited
-        std::cout << "max_idx = " << max_idx << std::endl;
+        // std::cout << "max_idx = " << max_idx << std::endl;
         std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
         const auto state_str =
           state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
         if (visited.count(state_str) == 0){
           visited.insert(state_str);
-          std::cout << "find a fast neigbour, leave" << std::endl;
+          // std::cout << "find a fast neigbour, leave" << std::endl;
           if (!next_states[index]->empty()) {
             next_states[index]->pop_back();
             next_states[index]->push_back(std::move(good_from_predict[max_idx]));
@@ -1901,7 +1901,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
           break;
         }
         else {
-          std::cout << "find a fast neigbour, but visited, continue" << std::endl;
+          // std::cout << "find a fast neigbour, but visited, continue" << std::endl;
           continue;
         }
       }
@@ -1919,7 +1919,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
       // get 3hop neighbors
       Array<State> three_hop_neighbors =
           gen_neigbour_list(local_path[0], pz_factors, sketch_cache_, v_splitMeta_info, 3);
-      std::cout << "3hop neighbors size = " << three_hop_neighbors.size() << std::endl;
+      // std::cout << "3hop neighbors size = " << three_hop_neighbors.size() << std::endl;
 
       std::vector<float> pop_scores_3hop;
       auto timer_3hop_predict = std::chrono::high_resolution_clock::now();
@@ -1927,7 +1927,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
       double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
                             std::chrono::high_resolution_clock::now() - timer_3hop_predict)
                             .count();
-      std::cout << "3hop predict time elapsed: " << duration << std::endl;
+      // std::cout << "3hop predict time elapsed: " << duration << std::endl;
 
       float base_score = pop_scores_3hop[0];
       Array<State> loal_path_neighbors_3hop =
@@ -1940,18 +1940,18 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
       // std::cout << "topn = " << topn << std::endl;
 
       while (max_idx == -1 && window_start + topn <= static_cast<int>(loal_path_neighbors_3hop.size())) {
-        std::cout << "3 hop neighbors size: " << loal_path_neighbors_3hop.size() << std::endl;
-        std::cout << "loal_path_neighbors_3hop.size() = " << loal_path_neighbors_3hop.size() << std::endl;
-        std::cout << "window_start = " << window_start << std::endl;
-        std::cout << "topn = " << topn << std::endl;
-        std::cout << "idx start from " << window_start << " to " << window_start + topn
-                  << std::endl;
+        // std::cout << "3 hop neighbors size: " << loal_path_neighbors_3hop.size() << std::endl;
+        // std::cout << "loal_path_neighbors_3hop.size() = " << loal_path_neighbors_3hop.size() << std::endl;
+        // std::cout << "window_start = " << window_start << std::endl;
+        // std::cout << "topn = " << topn << std::endl;
+        // std::cout << "idx start from " << window_start << " to " << window_start + topn
+        //           << std::endl;
 
         // tolerant_score threshold
         if (tolerant_score > neighbour_scores_3hop[indices_3hop[window_start]] ||
             neighbour_scores_3hop[indices_3hop[window_start]] < 0 || topn == 0) {
-          std::cout << "tolerance threshold early stopped" << std::endl;
-          std::cout << "tolerant_score = " << tolerant_score << std::endl;
+          // std::cout << "tolerance threshold early stopped" << std::endl;
+          // std::cout << "tolerant_score = " << tolerant_score << std::endl;
           break;
         }
 
@@ -1999,7 +1999,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
         }
 
         // now we have not_measured_states, we need to measure them
-        std::cout << "not_measured_states.size() = " << not_measured_states.size() << std::endl;
+        // std::cout << "not_measured_states.size() = " << not_measured_states.size() << std::endl;
         Array<MeasureInput> inputs = PackState(not_measured_states, not_measured_states.size());
         Array<MeasureResult> results = measurer->xMeasure(search_task, GetRef<SearchPolicy>(this),
                                                           inputs, not_measured_scores, model_age);
@@ -2024,12 +2024,12 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
           neighbor_gflops[not_measured_states_map[state_str]] = gflops_map_[state_str];
         }
 
-        std::cout << "base_state_gflops = " << base_state_gflops << std::endl;
-        std::cout << "neighbor_gflops: " << std::endl;
-        int j = 0;
-        for (auto& w : neighbor_gflops) {
-          std::cout << j++ << ": " << w << std::endl;
-        }
+        // std::cout << "base_state_gflops = " << base_state_gflops << std::endl;
+        // std::cout << "neighbor_gflops: " << std::endl;
+        // int j = 0;
+        // for (auto& w : neighbor_gflops) {
+        //   std::cout << j++ << ": " << w << std::endl;
+        // }
 
         float max_flops = base_state_gflops;
         for (size_t i = 0; i < neighbor_gflops.size(); i++) {
@@ -2040,13 +2040,13 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
         }
 
         if (max_idx != -1) {// possible moving, check if visited
-          std::cout << "max_idx = " << max_idx << std::endl;
+          // std::cout << "max_idx = " << max_idx << std::endl;
           std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, good_from_predict[max_idx]);
           const auto state_str =
             state_to_string(good_from_predict[max_idx], tmp_meta_info, search_task);
           if (visited.count(state_str) == 0){
             visited.insert(state_str);
-            std::cout << "find a fast neigbour, leave" << std::endl;
+            // std::cout << "find a fast neigbour, leave" << std::endl;
             if (!next_states[index]->empty()) {
               next_states[index]->pop_back();
               next_states[index]->push_back(std::move(good_from_predict[max_idx]));
@@ -2059,7 +2059,7 @@ void SketchPolicyNode::NodeMove(Array<Array<State>> neighbour_table,
             break;
           }
           else {
-            std::cout << "find a fast neigbour, but visited, continue" << std::endl;
+            // std::cout << "find a fast neigbour, but visited, continue" << std::endl;
             continue;
           }
         }
@@ -2198,10 +2198,10 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
     auto next = next_states[i];
     if (next->empty()) {
       if (count_sampled + 1 > n_start + batch_size - 1) {
-        std ::cout << "count_sampled = " << count_sampled << std::endl;
-        std ::cout << "n_start = " << n_start << std::endl;
-        std ::cout << "batch_size = " << batch_size << std::endl;
-        std::cout << "count_sampled + 1 > n_start + batch_size - 1" << std::endl;
+        // std ::cout << "count_sampled = " << count_sampled << std::endl;
+        // std ::cout << "n_start = " << n_start << std::endl;
+        // std ::cout << "batch_size = " << batch_size << std::endl;
+        // std::cout << "count_sampled + 1 > n_start + batch_size - 1" << std::endl;
         count_sampled = -1;
         return;
       }
