@@ -189,6 +189,9 @@ class SearchPolicyNode : public Object {
   std::vector<State> measured_states_vector_;
   /*! \brief The throughputs of already measured states */
   std::vector<float> measured_states_throughputs_;
+
+  // map to cache the gflops of states, key is std::string of state, value is gflops
+  std::unordered_map<std::string, float> gflops_map_;
 };
 
 /*!
