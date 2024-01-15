@@ -2654,7 +2654,7 @@ Array<State> SketchPolicyNode::SampleCUDAInitPopulation(const Array<State>& sket
       std::unordered_map<std::string, std::vector<int>> current_config =
           GetStateFactor(search_task, s);
       ConfigKey config_key = map_to_configkey(current_config, v_splitMeta_info);
-      tmp_conf_table[tmp_idx] = config_key;
+      tmp_conf_table[tmp_idx++] = config_key;
     }
     Array<State> sampled_states =
         SampleUniquePopulation(tmp_conf_table, sketch_cache_, v_splitMeta_info);
