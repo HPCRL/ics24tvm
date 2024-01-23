@@ -244,7 +244,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       sketch_cache_ = GenerateSketches();
     }
     initStatesForModel = SampleCUDAInitPopulation(sketch_cache_, sample_init_min_pop_);    
-    initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
+    // initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
     // sample to update the model
     inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
 
@@ -258,7 +258,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
       }
 
       // cache the gflops of states
-      assert(initStatesForModel.size() == results.size());
       for (size_t i = 0; i < initStatesForModel.size(); i++) {
         std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, initStatesForModel[i]);
         const auto state_str = state_to_string(initStatesForModel[i], tmp_meta_info, search_task);
@@ -399,30 +398,6 @@ Array<State> SketchPolicyNode::SearchOneRound(int num_random_states, Array<State
     *random_states = RandomSampleStates(init_population, &rand_gen, num_random_states);
   }
   return EvolutionarySearch(init_population, num_measure_per_iter_ * 2);
-}
-
-void generatePermutations(const std::unordered_map<int, Array<Array<Integer>>>& full_factor_list,
-                          std::vector<Array<Integer>>& current_config, int depth,
-                          std::map<int, ConfigKey>& conf_table, int& idx) {
-  if (current_config.size() == size_t(depth)) {
-    ConfigKey config_key;
-    for (auto& config_value : current_config) {
-      for (auto& value : config_value) {
-        config_key.push_back(static_cast<int>(value));
-      }
-    }
-    conf_table[idx++] = config_key;
-    return;
-  }
-
-  for (auto config_value : full_factor_list.at(current_config.size())) {
-    if (config_value.size() == 1) {
-      config_value.push_back(1);
-    }
-    current_config.push_back(config_value);
-    generatePermutations(full_factor_list, current_config, depth, conf_table, idx);
-    current_config.pop_back();
-  }
 }
 
 ConfigKey SketchPolicyNode::map_to_configkey(
@@ -667,9 +642,6 @@ std::vector<ConfigKey> SketchPolicyNode::UpDownMutate(
   std::vector<ConfigKey> neighbors_config_key;
 
   // up-down mutate for tb or reg, push into the neighbors_config_key
-  //  int max_innermost_split_factor = GetIntParam(this->params,
-  //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
-  int max_innermost_split_factor = INT_MAX;
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
   for (auto sm : v_splitMeta_info) {
     if (sm->parallel) {  // mutate for this dimension and concrete tmp_config
@@ -920,9 +892,6 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   }
 
   // up-down mutate for tb or reg, push into the neighbors_config_key
-  //  int max_innermost_split_factor = GetIntParam(this->params,
-  //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
-  int max_innermost_split_factor = INT_MAX;
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
   bool is_valid = true;
   for (auto sm : v_splitMeta_info) {
@@ -1161,24 +1130,6 @@ std::vector<ConfigKey> SketchPolicyNode::MaskUpDownMutate(
   return neighbors_config_key;
 }
 
-std::string conf2string(const ConfigKey& conf) {
-  std::string res = "";
-  for (auto& c : conf) {
-    res += std::to_string(c) + " ";
-  }
-  return res;
-}
-
-int containsConfigKey(const std::map<int, ConfigKey>& map, const ConfigKey& keyToFind) {
-  int i = 0;
-  for (const auto& pair : map) {
-    if (pair.second == keyToFind) {
-      return i;
-    }
-  }
-  return 0;
-}
-
 /* Generate direct neighbors states for state
  *  @param states: base states
  *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
@@ -1322,80 +1273,6 @@ int SketchPolicyNode::cur_config_len(
   return i;
 }
 
-// std::vector<std::vector<int>> remove_invalid_mask(
-//     std::unordered_map<std::string, std::vector<int>> current_config,
-//     std::vector<splitMeta*> v_splitMeta_info,
-//     std::vector<std::vector<int>>& masks) {
-
-//   std::vector<std::vector<int>> filtered_masks;
-
-//   // remove pz==1 dimension's mask if its mask is not 0.
-//   int i = 0;
-  
-//   // create map dims_pz1_map_
-//   std::unordered_map<std::string, bool> dims_pz1_map_;
-//   for (auto sm : v_splitMeta_info) {
-//     if (sm->parallel) {
-//       auto dim_name = sm->origin_itr->name;
-//       auto pz = sm->problem_size;
-//       if (pz == 1) {
-//         dims_pz1_map_[dim_name] = true;
-//       } else {
-//         dims_pz1_map_[dim_name] = false;
-//       }
-//     }
-//     else {
-//       auto dim_name = sm->origin_itr->name;
-//       auto pz = sm->problem_size;
-//       if (pz == 1) {
-//         dims_pz1_map_[dim_name] = true;
-//       } else {
-//         dims_pz1_map_[dim_name] = false;
-//       }
-//     }
-//   }
-//   // print dims_pz1_map_
-//   std::cout << "dims_pz1_map_: " << std::endl;
-//   for (auto& d : dims_pz1_map_) {
-//     std::cout << d.first << ": " << d.second << std::endl;
-//   }
-
-
-//   for (auto mask : masks) {
-//     bool valid = true;
-//     int j = 0;
-//     for (auto sm : v_splitMeta_info) {
-//       if (sm->parallel) {
-//         auto dim_name = sm->origin_itr->name;
-//         auto pz = sm->problem_size;
-//         if (dims_pz1_map_[dim_name] == true) {
-//           if (mask[j] != 0) {
-//             valid = false;
-//             break;
-//           }
-//         }
-//         j += 2;
-//       } else {
-//         auto dim_name = sm->origin_itr->name;
-//         auto pz = sm->problem_size;
-//         if (dims_pz1_map_[dim_name] == true) {
-//           if (mask[j] != 0) {
-//             valid = false;
-//             break;
-//           }
-//         }
-//         j += 1;
-//       }
-//     }
-//     if (valid) {
-//       filtered_masks.push_back(mask);
-//     }
-//   }
-
-//   return filtered_masks;
-// }
-
-
 /* Generate neighbors states for all base states
  *  @param states: base states
  *  @param pz_factors: factor list for problem size for example: dim_i = 6 --> factor[1, 2, 3, 6]
@@ -1486,12 +1363,9 @@ ConfigKey SketchPolicyNode::RandomMutate(
     std::unordered_map<std::string, std::vector<int>> pz_factors,
     std::vector<splitMeta*> v_splitMeta_info) {
   // up-down mutate for tb or reg, push into the neighbors_config_key
-  //  int max_innermost_split_factor = GetIntParam(this->params,
-  //  SketchParamKey::max_innermost_split_factor); use INT_MAX to disable it temporarily
-  // int max_innermost_split_factor = INT_MAX;
 
   std::unordered_map<std::string, std::vector<int>> tmp_config = current_config;
-  // std::cout << "[RandomMutate]current_config: \n" << std::endl;
+  // std::cout << "current_config: \n" << std::endl;
   // for (auto c : current_config) {
   //   std::string key = c.first;
   //   std::vector<int> value = c.second;
@@ -1569,19 +1443,19 @@ ConfigKey SketchPolicyNode::RandomMutate(
 
     next_config_key = map_to_configkey(tmp_config, v_splitMeta_info);
 
-    // std::cout << "[RandomMutate]before: next_config_key: \n" << std::endl;
+    // std::cout << "before: next_config_key: \n" << std::endl;
     // for (auto c : next_config_key) {
     //   std::cout << c << " ";
     // }
     // std::cout << std::endl;
-    // std::cout << "[RandomMutate]num_changes: " << num_changes << std::endl;
+    // std::cout << "num_changes: " << num_changes << std::endl;
     for (int i = 0; i < num_changes; i++) {
       // change next_config_key[selected_dim_id] to pz_factors[selected_dim_id][new_index]
       int selected_dim_id = dim_mask[i];
       std::string dim_name = mask_id_name_map[selected_dim_id];
       int tile_index = cur_config_index[selected_dim_id];
 
-      // std::cout << "[RandomMutate]selected_dim_id: " << selected_dim_id << ", dim_name: " <<
+      // std::cout << "selected_dim_id: " << selected_dim_id << ", dim_name: " <<
       // dim_name << ", tile_index: " << tile_index << std::endl;
 
       int total_step = pz_factors[dim_name].size();  // bug here: second round -> total_step = 1
@@ -1594,13 +1468,13 @@ ConfigKey SketchPolicyNode::RandomMutate(
       int new_index = (tile_index + jump_size) % total_step;
       tmp_config_index[selected_dim_id] = new_index;
       // change next_config_key[selected_dim_id] to pz_factors[dim_name][new_index]
-      // std::cout << "[RandomMutate]change next_config_key[" << selected_dim_id << "] = " <<
+      // std::cout << "change next_config_key[" << selected_dim_id << "] = " <<
       // next_config_key[selected_dim_id]
       // << " to pz_factors[" << dim_name << "][" << new_index << "] = " <<
       // pz_factors[dim_name][new_index] << std::endl;
       next_config_key[selected_dim_id] = pz_factors[dim_name][new_index];
     }
-    // std::cout << "[RandomMutate] after: next_config_key: \n" << std::endl;
+    // std::cout << " after: next_config_key: \n" << std::endl;
     // for (auto c : next_config_key) {
     //   std::cout << c << " ";
     // }
@@ -2239,7 +2113,7 @@ void SketchPolicyNode::SearchOneRoundPruePredict(int batch_size, int n_start, Pr
       }
       // if no valid in start_states, re-sample
       if ((*start_idx) > start_states.size() - 1) {
-        Array<State> tmp_start_states = SampleCUDAInitPopulation(sketch_cache_, 2);
+        Array<State> tmp_start_states = SampleCUDAInitPopulation(sketch_cache_, 1);
         next->push_back(tmp_start_states[0]);
       }
       else {
@@ -2442,153 +2316,8 @@ Array<State> SketchPolicyNode::SampleUniquePopulation(std::map<int, ConfigKey> c
     }
   }
   // std::cout << "after pruning, out_states size: " << out_states.size() << std::endl;
-  // std::cout << "fail_ct: " << fail_ct << std::endl;cuda_view
+  // std::cout << "fail_ct: " << fail_ct << std::endl;
 
-  return out_states;
-}
-
-// we prefer sample from cuda view, so we need to check if the current config is cuda view prefer
-bool SketchPolicyNode::cuda_view(const State& state,
-                                 std::unordered_map<std::string, std::vector<int>> current_config,
-                                 std::vector<splitMeta*> v_splitMeta_info) {
-  ConfigKey config_key;
-  // std::cout << "size of v_splitMeta_info: " << v_splitMeta_info.size() << std::endl;
-  int total_tb_size = 1;
-  int totalReg = 1;
-  for (auto spm : v_splitMeta_info) {
-    // std::cout << "spm : " << *spm << std::endl;
-    if (spm->parallel == 1) {  // filter tb size for parallel dims
-      int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
-      int tb = spm->tile_sizes[2];
-      totalReg *= reg;
-      total_tb_size *= tb;
-      // (Chendi)further prune?
-    } else {  // and filter inner_outer for reduce dims
-      // (Chendi)further prune?
-    }
-  }
-  if (totalReg > 256) {
-    return false;
-  }
-  if (total_tb_size > 1024 || total_tb_size < 32) {
-    return false;
-  }
-  return true;
-}
-
-Array<State> SketchPolicyNode::SampleCUDAPopulation(const Array<State>& sketches,
-                                                    int num_required) {
-  // PrintTitle("Sample CUDA View Population", verbose);
-  // Use this population as the parallel degree to do sampling
-  int population = num_required * 2;
-  sample_init_min_pop_ = num_required;
-  auto tic_begin = std::chrono::high_resolution_clock::now();
-
-  int fail_ct = 0;
-  Array<State> out_states;
-  std::vector<std::mt19937> rand_gens;
-  rand_gens.reserve(population);
-  for (int i = 0; i < population; i++) {
-    rand_gens.push_back(std::mt19937(rand_gen()));
-  }
-
-  std::unordered_set<std::string> explored_state_strs;
-  size_t iter = 1;
-  size_t unchange_cnt = 0;
-  while (static_cast<int>(out_states.size()) < sample_init_min_pop_) {
-    std::vector<State> temp_states(population);
-
-    // Sample a batch of states randomly
-    // TODO(Chendi): apply capacity prune here
-    support::parallel_for(0, population, [this, &temp_states, &sketches, &rand_gens](int index) {
-      // Randomly choose a sketch
-      State tmp_s = sketches[(rand_gens[index])() % sketches.size()];
-      // Apply random annotation rules one by one
-      bool valid = true;
-      for (const auto& rule : init_rules) {
-        if (rule->Apply(this, &tmp_s, &rand_gens[index]) ==
-            PopulationGenerationRule::ResultKind::kInvalid) {
-          valid = false;
-          break;
-        }
-      }
-      if (valid) {
-        temp_states[index] = std::move(tmp_s);
-      }
-    });
-
-    // Filter out the states that were failed to apply initial rules
-    Array<State> cand_states;
-    for (auto tmp_s : temp_states) {
-      if (tmp_s.defined()) {
-        cand_states.push_back(std::move(tmp_s));
-      } else {
-        fail_ct++;
-      }
-    }
-
-    unchange_cnt++;
-    if (!cand_states.empty()) {
-      // Run the cost model to make filter out states that failed to extract features.
-      // This may happen due to illegal schedules or the schedules that uses too much
-      // memory on GPU.
-      cand_states = search_task->compute_dag.InferBound(cand_states);
-      PruneInvalidState(search_task, &cand_states);
-
-      for (size_t i = 0; i < cand_states.size(); i++) {
-        // skip cache_failed
-        if (cache_failed.count(cand_states[i].ToStr()) != 0) {
-          continue;
-        }
-        // failure visited use toStr() to avoid
-        std::vector<splitMeta*> v_splitMeta_info;
-        v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
-        const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
-        std::unordered_map<std::string, std::vector<int>> current_config =
-            GetStateFactor(search_task, cand_states[i]);
-        bool isCudaView = cuda_view(cand_states[i], current_config, v_splitMeta_info);
-        if (isCudaView && explored_state_strs.count(state_str) == 0 &&
-            visited.count(state_str) == 0) {
-          explored_state_strs.insert(state_str);
-          out_states.push_back(std::move(cand_states[i]));
-          unchange_cnt = 0;        // Reset the counter once we found a valid state
-        } else if (!isCudaView) {  // count cuda view failed, bring pop/2 to here
-          fail_ct++;
-          // cache all sampled population
-          cache_failed.insert(cand_states[i].ToStr());
-        }
-      }
-    }
-
-    if (iter % 50 == 0) {
-      double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
-                            std::chrono::high_resolution_clock::now() - tic_begin)
-                            .count();
-      StdCout(verbose) << "Sample Iter: " << iter << std::fixed << std::setprecision(4)
-                       << "\t#Pop: " << out_states.size() << "\t#Target: " << sample_init_min_pop_
-                       << "\tCUDA view fail_ct: " << fail_ct << "\tTime elapsed: " << std::fixed
-                       << std::setprecision(2) << duration << std::endl;
-    }
-
-    if (unchange_cnt == 5) {
-      // Reduce the target size to avoid too-long time in this phase if no valid state was found
-      // in the past iterations
-      if (sample_init_min_pop_ > 1) {
-        sample_init_min_pop_ /= 2;
-        StdCout(verbose) << "#Target has been reduced to " << sample_init_min_pop_
-                         << " due to too many failures or duplications" << std::endl;
-      }
-      unchange_cnt = 0;
-    }
-    iter++;
-  }
-
-  double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
-                        std::chrono::high_resolution_clock::now() - tic_begin)
-                        .count();
-  StdCout(verbose) << "Sample \t#s: " << out_states.size() << "\tCUDA view fail_ct: " << fail_ct
-                   << "\tTime elapsed: " << std::fixed << std::setprecision(2) << duration
-                   << std::endl;
   return out_states;
 }
 
@@ -2680,46 +2409,6 @@ Array<State> SketchPolicyNode::SampleCUDAInitPopulation(const Array<State>& sket
         }
       }
     }
-
-
-
-
-    // if (!cand_states.empty()) {
-    //   // Run the cost model to make filter out states that failed to extract features.
-    //   // This may happen due to illegal schedules or the schedules that uses too much
-    //   // memory on GPU.
-
-    //   std::vector<float> pop_scores;
-    //   pop_scores.reserve(cand_states.size());
-    //   cand_states = search_task->compute_dag.InferBound(cand_states);
-    //   PruneInvalidState(search_task, &cand_states);
-    //   program_cost_model->Predict(search_task, cand_states, &pop_scores);
-
-
-    //   for (size_t i = 0; i < cand_states.size(); i++) {
-    //     // skip cache_failed
-    //     if (cache_failed.count(cand_states[i].ToStr()) != 0) {
-    //       continue;
-    //     }
-    //     // failure visited use toStr() to avoid
-    //     std::vector<splitMeta*> v_splitMeta_info;
-    //     v_splitMeta_info = GenerateSplitMeta(this, cand_states[i]);
-    //     const auto state_str = state_to_string(cand_states[i], v_splitMeta_info, search_task);
-    //     std::unordered_map<std::string, std::vector<int>> current_config =
-    //         GetStateFactor(search_task, cand_states[i]);
-    //     ConfigKey config_key = map_to_configkey(current_config);
-    //     bool isCudaView = cuda_view(cand_states[i], current_config, v_splitMeta_info);
-    //     if (pop_scores[i] > -1e10 && isCudaView && explored_state_strs.count(state_str) == 0) {
-    //       explored_state_strs.insert(state_str);
-    //       out_states.push_back(std::move(cand_states[i]));
-    //       unchange_cnt = 0;        // Reset the counter once we found a valid state
-    //     } else if (!isCudaView) {  // count cuda view failed, bring pop/2 to here
-    //       fail_ct++;
-    //       // cache all sampled population
-    //       cache_failed.insert(cand_states[i].ToStr());
-    //     }
-    //   }
-    // }
 
     if (iter % 500 == 0) {
       double duration = std::chrono::duration_cast<std::chrono::duration<double>>(
