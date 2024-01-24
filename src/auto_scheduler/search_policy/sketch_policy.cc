@@ -226,7 +226,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   std::vector<Array<State>*> next_states;
   Array<MeasureInput> inputs;
   Array<MeasureResult> results;
-  Array<State> local_min_best_states, track_path;
   // record all local min states
   Array<State> local_min_set, initStatesForModel;
 
@@ -239,17 +238,30 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   Array<State> start_states;
 
   // generate a model based on random sampling and measure them
-  if (ct == 0) {  // just run it at the first time
+  if (sample_init_min_pop_ != 0) {
     if (sketch_cache_.empty()) {
       sketch_cache_ = GenerateSketches();
     }
-    initStatesForModel = SampleCUDAInitPopulation(sketch_cache_, sample_init_min_pop_);    
-    // initStatesForModel = search_task->compute_dag.InferBound(initStatesForModel);
-    // sample to update the model
-    inputs = PackStateForModel(initStatesForModel, sample_init_min_pop_);
 
+    // sample init population for model training
+    int max_retry = 3;
+    do {
+      auto additional_states = SampleCUDAInitPopulation(sketch_cache_, sample_init_min_pop_ - inputs.size());
+
+      initStatesForModel = search_task->compute_dag.InferBound(additional_states);
+      auto new_inputs = PackStateForModel(initStatesForModel, initStatesForModel.size());
+
+      if (!inputs.empty()){ // not empty, so need to use insert
+        inputs.insert(inputs.end(), new_inputs.begin(), new_inputs.end());
+      } else { // reduce memory copy
+        inputs = new_inputs;
+      }
+      std::cout << "inputs size: " << inputs.size() << std::endl;
+    } while (inputs.size() < sample_init_min_pop_ && max_retry-- > 0);
+
+    // measure the init population
     if (!inputs.empty()) {
-      // use xMeasure to avoid write into the json log
+      // use Measure to avoid write into the json log
       results = measurer->Measure(search_task, GetRef<SearchPolicy>(this), inputs);
 
       // push back the measured_states_throughputs_
@@ -257,19 +269,19 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
         measured_states_throughputs_.push_back(1.0 / FloatArrayMean(res->costs));
       }
 
-      // cache the gflops of states
-      for (size_t i = 0; i < initStatesForModel.size(); i++) {
-        std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, initStatesForModel[i]);
-        const auto state_str = state_to_string(initStatesForModel[i], tmp_meta_info, search_task);
+      // cache the gflops of states, reduce re-measure
+      for (size_t i = 0; i < inputs.size(); i++) {
+        std::vector<splitMeta*> tmp_meta_info = GenerateSplitMeta(this, inputs[i]->state);
+        const auto state_str = state_to_string(inputs[i]->state, tmp_meta_info, search_task);
         gflops_map_[state_str] = search_task->compute_dag->flop_ct / FloatArrayMean(results[i]->costs) / 1e9;
         gflops_map_[state_str] = gflops_map_[state_str];
       }
 
-      // sort and get the top 5 of the measured_states_vector_
+      // sort and get the top 5 of the measured_states_vector_, use them as start states
       auto indices = Argsort(measured_states_throughputs_);
       for (int i = 0; i < std::min(static_cast<int>(indices.size()), num_start); i++) {
-        start_states.push_back(initStatesForModel[indices[i]]);
-      }      
+        start_states.push_back(inputs[indices[i]]->state);
+      }
 
       auto t_begin = std::chrono::high_resolution_clock::now();
 
@@ -284,7 +296,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
 
   assert(start_states.size() == num_start);
 
-  // // printout the start_states for debug
+  // printout the start_states for debug
   // for (auto state : start_states) {
   //   std::cout << "start_states: " << state << std::endl;
   // }
@@ -292,6 +304,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   // std::cout << "@@@@start_states size: " << start_states.size() << std::endl;
   // std::cout << "global_tolerant_threashold: " << global_tolerant_threashold << std::endl;
 
+  // init next_states
   for (int i = 0; i < batch_size; i++) {
     next_states.push_back(new Array<State>());
   }
@@ -305,7 +318,6 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     // create new predict based search
     SearchOneRoundPruePredict(batch_size, num_start, measurer, next_states, start_states, &start_idx, firsttime_random,
                               &model_age);
-    // std::cout << "Num of local min got: #" << local_min_set.size() << std::endl;
     // std::cout << "Num of next_states: #" << next_states.size() << std::endl;
     // std::cout << "Num of measured_states_throughputs_: #" << measured_states_throughputs_.size()
     //           << std::endl;
@@ -2893,7 +2905,7 @@ std::string SketchPolicyNode::state_to_string(const State& state,
   return res;
 }
 
-/* Pack state into MeasureInput and clear local_measured_states_set_
+/* Pack state into MeasureInput and clear init_model_states_set_
  *  @param best_states: states waiting to be measured
  *  @return: MeasureInput
  */
@@ -2909,7 +2921,6 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     offset_best_upperbound = best_states.size();
   }
 
-  std::unordered_set<std::string> local_measured_states_set_;
   while (offset_best < offset_best_upperbound) {
     State state;
     state = best_states[offset_best++];
@@ -2919,14 +2930,14 @@ Array<MeasureInput> SketchPolicyNode::PackStateForModel(const Array<State>& best
     std::vector<splitMeta*> v_splitMeta_info;
     v_splitMeta_info = GenerateSplitMeta(this, state);
     std::string state_str = state_to_string(state, v_splitMeta_info, search_task);
-    if (!local_measured_states_set_.count(state_str)) {
-      local_measured_states_set_.insert(
+    if (!init_model_states_set_.count(state_str)) {
+      init_model_states_set_.insert(
           std::move(state_str));  // just for remove dup, will clear later
       measured_states_vector_.push_back(state);
       inputs.push_back(MeasureInput(search_task, state));
     }
   }
-  // std::cout << "PackState inputs size: " << inputs.size() << std::endl;
+  std::cout << "PackState inputs size: " << inputs.size() << std::endl;
   return inputs;
 }
 

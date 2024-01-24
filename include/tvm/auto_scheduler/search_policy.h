@@ -184,6 +184,7 @@ class SearchPolicyNode : public Object {
    * measured state will never be measured again.
    */
   std::unordered_set<std::string> measured_states_set_;
+  std::unordered_set<std::string> init_model_states_set_;
   /*! \brief The array of already measured states.
    *  The good states can be used as the initial population in evolutionary search. */
   std::vector<State> measured_states_vector_;
