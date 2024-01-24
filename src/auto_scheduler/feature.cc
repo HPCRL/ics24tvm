@@ -2710,15 +2710,13 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout<< "\n---Check BC---" << std::endl;
   // std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
   // std::cout<< "OI_Shared : " << OI_Shared << std::endl;
+  // std::cout<< "thread_block_size " << thread_block_size << std::endl;
   // std::cout<< "OI_Shared_ops : " << thread_block_size * ouput_reg * sm_rc * sm_rx * sm_ry * 1.0 << std::endl;
   // std::cout<< "original shared_trans_per_tb : " <<shared_trans_per_tb << std::endl;
   // std::cout<< "adjusted shared_trans_per_tb : " <<adj_shared_trans_per_tb << std::endl;
   // std::cout<< "num_TB : " << num_TB << std::endl;
   // std::cout<< "adjusted total_shared : " << adj_shared_trans_per_tb * num_TB << std::endl;
   // std::cout<< "---Check BC End---\n" << std::endl;
-
-  // std::cout<< "ILP: " << ILP << ", WLP_SM: " << WLP_SM << ", WLP_REG: " << WLP_REG << std::endl;
-  // std::cout<< "WLP: " << WLP << ", Concurrent_estimate: " << Concurrent_estimate << std::endl;
 
   // push back to features, wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global
   features->push_back(wave_efficiency);
@@ -2731,8 +2729,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Shared);
   
   // std::cout<< "---Feature---" << std::endl;
-  // std::cout<< "thread_block_size " << thread_block_size << std::endl;
-  // std::cout<< "global_trans " << global_trans << std::endl;
   // std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
   // std::cout<< "est_occupancy " << est_occupancy << std::endl;
   // std::cout<< "ILP " << ILP << std::endl;
@@ -2742,72 +2738,6 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   // std::cout<< "OI_Global " << OI_Global << std::endl;
   // std::cout<< "OI_Shared " << OI_Shared << std::endl;
   // std::cout<< "---Feature End---\n" << std::endl;
-
-  // TODO: change to 0.67
-  // if (thread_block_size < 32 || thread_block_size > 1024 || wave_efficiency < 0.67){
-  //   return std::make_tuple(-1, -1, -1, -1);
-  // }
-  // if (pz_rx == 7){ // KW/KH = 7
-    
-  //   if (sm_rx != 7 || sm_ry != 7){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if ( reg_yy != 1){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-  // } else if (pz_rc == 3){// rgb = 3
-  //   if (sm_rx != 3 || sm_ry != 3){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if (reg_ff > 30 || reg_xx > 30) {
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if ( reg_yy != 1){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-  // }
-  // else if (pz_rx == 1){ // KW/KH = 1
-  //   if (sm_rc * sm_rx * sm_ry < 16 || sm_rc * sm_rx * sm_ry > 128){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if (reg_ff > 30 || reg_xx > 30) {
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if ( reg_yy != 1){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-  // }
-  // else{
-  //   if (sm_rx != 3 || sm_ry != 3){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if (sm_rc * sm_rx * sm_ry < 16){// kernel load global access coalescing
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if (sm_rc > 64){// no too large input SM
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if (reg_ff > 30 || reg_xx > 30) {
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-
-  //   if ( reg_yy != 1){
-  //     return std::make_tuple(-1, -1, -1, -1);
-  //   }
-  // }
-
-//   // check bank conflict, regff*sm_rc*sm_rx*sm_ry mod 32 == 0 possible bank conflict
-//   if ((reg_ff*sm_rc*sm_rx*sm_ry % 32 == 0) && (tb_xx*tb_yy < 32)){
-//     return std::make_tuple(-1, -1, -1, -1);
-//   }
 
   if (thread_block_size < 32 || thread_block_size > 1024){
     return std::make_tuple(-1, -1, -1, -1);
