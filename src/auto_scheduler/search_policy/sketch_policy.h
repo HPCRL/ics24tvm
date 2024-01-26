@@ -182,15 +182,21 @@ class SketchPolicyNode : public SearchPolicyNode {
 
   Array<State> SearchOneRound(int num_random_states, Array<State>* random_states = nullptr);
 
-  void SearchOneRoundPruePredict(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, Array<State> start_states, int* start_idx, bool firsttime_random = false,  int* model_age = nullptr);
+  void SearchOneRoundDGD(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, Array<State> start_states, int* start_idx, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
+  void DGD_Move(const State base_state, const std::vector<float>& neighbour_scores,
+                const std::vector<int>& indices, const Array<State> loal_path_neighbors,
+                std::unordered_set<std::string>& visited, int& max_idx,
+                std::vector<Array<State>*> next_states, int index, bool& found_better,
+                ProgramMeasurer measurer, const int window_size, const float tolerant_score,
+                const float global_best_gflops, const int model_age,
+                Array<MeasureInput>* total_inputs, Array<MeasureResult>* total_results);
+  void DGD_Search(Array<State> neighbour_table, std::vector<Array<State>*> next_states,
+                std::unordered_map<std::string, std::vector<int>> pz_factors,
+                Array<MeasureInput>* total_inputs, Array<MeasureResult>* total_results,
+                int model_age, ProgramMeasurer measurer, std::vector<splitMeta*> v_splitMeta_info);
 
-  void NodeMove(Array<Array<State>> neighbour_table, std::vector<Array<State>*>  next_states, std::unordered_map<std::string, std::vector<int>> pz_factors,    
-    Array<MeasureInput>* total_inputs,
-     Array<MeasureResult>* total_results,
-     int model_age, ProgramMeasurer measurer, std::vector<splitMeta*> v_splitMeta_info);
-  
   std::vector<ConfigKey> GetDirectNeighbors(std::unordered_map<std::string, std::vector<int>> current_config, std::unordered_map<std::string, std::vector<int>>  pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
   
   std::unordered_map<std::string, std::vector<int>> GetStateFactor(const SearchTask& task, const State& state);
