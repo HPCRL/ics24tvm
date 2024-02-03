@@ -606,29 +606,29 @@ class BCExtractor : public StmtExprVisitor {
   void Extract(const PrimExpr expr) { return this->VisitExpr(expr); }
 
   void VisitExpr_(const FloorDivNode* op) final {
-    //std::cout << " Div lefg node "<< op->a  << std::endl;
+    ////std::cout << " Div lefg node "<< op->a  << std::endl;
     if (op->a.as<VarNode>()){
       const VarNode* var_op = op->a.as<VarNode>();
-      //std::cout << "var" << var_op->name_hint << std::endl;
-      //std::cout << "right node "<< op->b << std::endl;
+      ////std::cout << "var" << var_op->name_hint << std::endl;
+      ////std::cout << "right node "<< op->b << std::endl;
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
-        //std::cout << "int" << int_op->value << std::endl;
+        ////std::cout << "int" << int_op->value << std::endl;
         threadx_val_map["div_"+op->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
       }
     }
     // else if (op->a.as<FloorModNode>() ){
-    //  // std::cout << " Div lefg mod node "<< op->a.as<FloorModNode>()->a  << std::endl;
+    //  // //std::cout << " Div lefg mod node "<< op->a.as<FloorModNode>()->a  << std::endl;
     //   if (op->a.as<FloorModNode>()->a.as<VarNode>()){
     //     const VarNode* var_op = op->a.as<FloorModNode>()->a.as<VarNode>();
-    //     //std::cout << "var" << var_op->name_hint << std::endl;
-    //     //std::cout << "right node "<< op->b << std::endl;
+    //     ////std::cout << "var" << var_op->name_hint << std::endl;
+    //     ////std::cout << "right node "<< op->b << std::endl;
     //     Global_threadx_val_map["div_"+op->a.as<FloorModNode>()->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
     //   }
     //   else if (op->a.as<FloorModNode>()->b.as<VarNode>()){
     //     const VarNode* var_op = op->a.as<FloorModNode>()->b.as<VarNode>();
-    //     //std::cout << "var" << var_op->name_hint << std::endl;
-    //     //std::cout << "right node "<< op->b << std::endl;
+    //     ////std::cout << "var" << var_op->name_hint << std::endl;
+    //     ////std::cout << "right node "<< op->b << std::endl;
     //    Global_threadx_val_map["div_"+op->a.as<FloorModNode>()->b.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
     //   }
     // }   
@@ -636,14 +636,14 @@ class BCExtractor : public StmtExprVisitor {
 
   }
   void VisitExpr_(const FloorModNode* op) final {
-    // std::cout << " Mod lefg node "<< op->a  << std::endl;
+    // //std::cout << " Mod lefg node "<< op->a  << std::endl;
     if (op->a.as<VarNode>()){
       const VarNode* var_op = op->a.as<VarNode>();
-      //std::cout << "var" << var_op->name_hint << std::endl;
-      //std::cout << "right node "<< op->b << std::endl;
+      ////std::cout << "var" << var_op->name_hint << std::endl;
+      ////std::cout << "right node "<< op->b << std::endl;
       if (op->b->dtype.is_int()){
         const IntImmNode* int_op = op->b.as<IntImmNode>();
-        //std::cout << "int" << int_op->value << std::endl;
+        ////std::cout << "int" << int_op->value << std::endl;
         threadx_val_map["mod_"+op->a.as<VarNode>()->name_hint] = op->b.as<IntImmNode>()->value;
       }
     }
@@ -917,17 +917,17 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     // for (const auto& x : buf_extractor.buf_accesses) {
     //     const Var& t = x.first;
     //     const BufferAccess& acc = x.second;
-    //     std::cout << "buff  " << t->name_hint << "-- "<< cur_auto_unroll_max_step_ << std::endl;
+    //     //std::cout << "buff  " << t->name_hint << "-- "<< cur_auto_unroll_max_step_ << std::endl;
     //     switch (acc.acc_type)
     //     {
     //       case BufferAccessType::kRead:
-    //           std::cout << "read\n";
+    //           //std::cout << "read\n";
     //           break;
     //       case BufferAccessType::kWrite:
-    //           std::cout << "write\n";
+    //           //std::cout << "write\n";
     //           break;
     //       case BufferAccessType::kReadWrite:
-    //           std::cout << "read/write\n";
+    //           //std::cout << "read/write\n";
     //           break;
     //       default:
     //         break;
@@ -935,23 +935,23 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     // }
 
     // if (static_cast<int>(is_gpu_) == 1){
-    //   std::cout << "TB shape  << " << threadIdx_x_len_ << ","<< thread_idx_y_len_ << ", "<< thread_idx_z_len_<<  " >>"<< std::endl;
-    //   std::cout << "GRID shape  << " << blockIdx_x_len_ << ","<< block_idx_y_len_ << ", "<< block_idx_z_len_<<  " >>"<< std::endl;
+    //   //std::cout << "TB shape  << " << threadIdx_x_len_ << ","<< thread_idx_y_len_ << ", "<< thread_idx_z_len_<<  " >>"<< std::endl;
+    //   //std::cout << "GRID shape  << " << blockIdx_x_len_ << ","<< block_idx_y_len_ << ", "<< block_idx_z_len_<<  " >>"<< std::endl;
     // }
     int buffer_vect_len = -1;
     if (static_cast<int>(is_gpu_) == 1){
       for (auto x : for_loop_stack_) {
         if (x->kind == ForKind::kVectorized){
-          // std::cout << "vect Var " << x->loop_var << std::endl;
-          // std::cout << "ext " << x->extent << std::endl;
+          // //std::cout << "vect Var " << x->loop_var << std::endl;
+          // //std::cout << "ext " << x->extent << std::endl;
           buffer_vect_len = GetIntImm(x->extent);
         }
         // else if(x->kind == ForKind::kParallel) {
-        //   std::cout << "TH Var " << x->loop_var << std::endl;
-        //   std::cout << "ext " << x->extent << std::endl;
+        //   //std::cout << "TH Var " << x->loop_var << std::endl;
+        //   //std::cout << "ext " << x->extent << std::endl;
         // }
         // else if(x->kind == ForKind::kUnrolled) {
-        //   std::cout << "NROLL Var " << x->loop_var << std::endl;
+        //   //std::cout << "NROLL Var " << x->loop_var << std::endl;
         // }
       }
     }
@@ -965,14 +965,14 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     for (int i = static_cast<int>(for_loop_stack_.size()) - 1; i >= 0; i--) {
       const ForNode* p_for = for_loop_stack_[i];
 
-      // std::cout << "-- Var " << p_for->loop_var << p_for->extent << " " << for_loop_stack_[i]->extent 
+      // //std::cout << "-- Var " << p_for->loop_var << p_for->extent << " " << for_loop_stack_[i]->extent 
       //  << " min "<< for_loop_stack_[i]->min << std::endl;
 
-      //std::cout << "-- Var " << p_for->loop_var << " " << p_for->extent << std::endl;
+      ////std::cout << "-- Var " << p_for->loop_var << " " << p_for->extent << std::endl;
       if (p_for->kind == ForKind::kParallel){
           std::string var_name = p_for->loop_var.get()->name_hint.c_str();
           if (var_name.find("blockIdx") != std::string::npos) {
-            //std::cout << "blockIdx ~~ " << std::endl;
+            ////std::cout << "blockIdx ~~ " << std::endl;
             continue;
           }
           else{
@@ -993,7 +993,7 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
           ComputeRegion(acc.indices, &ana_, &tmp_region);
           int64_t touched_size = ElementProduct(tmp_region);
 
-          // std::cout<< "Bffer name : " << t->name << " scope "<< GetScopeFromBufferName(t->name) 
+          // //std::cout<< "Bffer name : " << t->name << " scope "<< GetScopeFromBufferName(t->name) 
           // << " touched_size " << touched_size/parallel_devide << std::endl;
           (*buffer_touch_map)[t] = touched_size/parallel_devide;
       }
@@ -1016,7 +1016,7 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
       xacc_fea.indices = acc.indices;
     }
     //Per Stmt --> List of each buffer info
-    //std::cout << "???? xacc_feas size " << xacc_feas.size() << std::endl;
+    ////std::cout << "???? xacc_feas size " << xacc_feas.size() << std::endl;
     fea.access_feas = xacc_feas;
 
   }
@@ -1623,7 +1623,7 @@ private:
 float computeILP(const std::map<std::string, ParallelDataStruct>& parallel_data_map) {
     float ilp = 1;
     for (const auto &item : parallel_data_map) {
-        // std::cout << "parallel_data_map " << item.first << " " << item.second.reg << std::endl;
+        // //std::cout << "parallel_data_map " << item.first << " " << item.second.reg << std::endl;
         ilp *= item.second.reg;
     }
     return ilp;
@@ -1673,8 +1673,8 @@ float computeOI_Global(float global_trans, const std::map<std::string, ParallelD
     }
     OI_Global = total_OI * 1.0 / (32.0 * float(global_trans));
 
-    // std::cout << "total_OI " << total_OI << std::endl;
-    // std::cout << "OI_Global " << OI_Global << std::endl;
+    // //std::cout << "total_OI " << total_OI << std::endl;
+    // //std::cout << "OI_Global " << OI_Global << std::endl;
     return OI_Global;
 }
 
@@ -1690,16 +1690,16 @@ class BuffExtractor : public ExprFunctor<double(const PrimExpr& n)> {
   double Extract(const PrimExpr expr) { return this->VisitExpr(expr); }
 
   double VisitExpr_(const FloatImmNode* op) final {
-    // std::cout << "FloatImmNode node "<< op->value  << std::endl;
+    // //std::cout << "FloatImmNode node "<< op->value  << std::endl;
     return op->value;
   }
   double VisitExpr_(const IntImmNode* op) final {
-    // std::cout << "IntImmNode node "  << op->value << std::endl;
+    // //std::cout << "IntImmNode node "  << op->value << std::endl;
     return op->value;
   }
 
   double VisitExpr_(const VarNode* op) final {
-    // std::cout << "var node " << op->name_hint << " " << sm_name_val_map[op->name_hint] <<
+    // //std::cout << "var node " << op->name_hint << " " << sm_name_val_map[op->name_hint] <<
     // std::endl;
     std::string v_name = op->name_hint;
     return sm_name_val_map[op->name_hint];
@@ -1712,12 +1712,12 @@ class BuffExtractor : public ExprFunctor<double(const PrimExpr& n)> {
   }
 
   double VisitExpr_(const AddNode* op) final {
-    // std::cout << "add node "  << std::endl;
+    // //std::cout << "add node "  << std::endl;
     return VisitExpr(op->a) + VisitExpr(op->b);
   }
 
   double VisitExpr_(const MulNode* op) final {
-    // std::cout << "mul node "  << std::endl;
+    // //std::cout << "mul node "  << std::endl;
     return VisitExpr(op->a) * VisitExpr(op->b);
   }
 };
@@ -1734,14 +1734,14 @@ class ReuseExtractor : public ExprFunctor<void(const PrimExpr& n)> {
   void Extract(const PrimExpr expr) { this->VisitExpr(expr); }
 
   void VisitExpr_(const FloatImmNode* op) final {
-    // std::cout << "FloatImmNode node "<< op->value  << std::endl;
+    // //std::cout << "FloatImmNode node "<< op->value  << std::endl;
   }
   void VisitExpr_(const IntImmNode* op) final {
-    // std::cout << "IntImmNode node "  << op->value << std::endl;
+    // //std::cout << "IntImmNode node "  << op->value << std::endl;
   }
 
   void VisitExpr_(const VarNode* op) final {
-    // std::cout << "var node " << op->name_hint << " set " << sm_name_val_map[op->name_hint] <<
+    // //std::cout << "var node " << op->name_hint << " set " << sm_name_val_map[op->name_hint] <<
     // std::endl;
     std::string v_name = op->name_hint;
     this->name_val_map[op->name_hint] = 1;
@@ -1749,14 +1749,14 @@ class ReuseExtractor : public ExprFunctor<void(const PrimExpr& n)> {
   }
 
   void VisitExpr_(const AddNode* op) final {
-    // std::cout << "add node "  << std::endl;
+    // //std::cout << "add node "  << std::endl;
     VisitExpr(op->a);
     VisitExpr(op->b);
 
   }
 
   void VisitExpr_(const MulNode* op) final {
-    // std::cout << "mul node "  << std::endl;
+    // //std::cout << "mul node "  << std::endl;
     VisitExpr(op->a);
     VisitExpr(op->b);
   }
@@ -1781,7 +1781,7 @@ class IndexExtractor : public ExprFunctor<std::string(const PrimExpr& n)> {
   std::string VisitExpr_(const IntImmNode* op) final { return ""; }
 
   std::string VisitExpr_(const VarNode* op) final {
-    std::cout << "var node " << op->name_hint << std::endl;
+    //std::cout << "var node " << op->name_hint << std::endl;
     std::string v_name = op->name_hint;
     if (v_name.find("r") != std::string::npos || v_name.find("k") != std::string::npos || v_name.find("d") != std::string::npos) {
       if (std::find(reduction_index.begin(), reduction_index.end(),v_name)==reduction_index.end())
@@ -1795,10 +1795,10 @@ class IndexExtractor : public ExprFunctor<std::string(const PrimExpr& n)> {
   }
 
   std::string VisitExpr_(const FloorDivNode* op) final {
-    std::cout << "FloorDivNode node "  << std::endl;
+    //std::cout << "FloorDivNode node "  << std::endl;
     auto left = VisitExpr(op->a);
     auto right = VisitExpr(op->b);
-    std::cout << "left " << left << " right " << right << std::endl;
+    //std::cout << "left " << left << " right " << right << std::endl;
     if (left != "") touch_index.push_back(left);
     if (right != "") touch_index.push_back(right);
     if (right != "" && right.find("r") != std::string::npos)  stencil_index.push_back(right);
@@ -1806,10 +1806,10 @@ class IndexExtractor : public ExprFunctor<std::string(const PrimExpr& n)> {
   }
 
   std::string VisitExpr_(const FloorModNode* op) final {
-    std::cout << "FloorModNode node "  << std::endl;
+    //std::cout << "FloorModNode node "  << std::endl;
     auto left = VisitExpr(op->a);
     auto right = VisitExpr(op->b);
-    std::cout << "left " << left << " right " << right << std::endl;
+    //std::cout << "left " << left << " right " << right << std::endl;
     if (left != "") touch_index.push_back(left);
     if (right != "") touch_index.push_back(right);
     if (right != "" && right.find("r") != std::string::npos)  stencil_index.push_back(right);
@@ -1817,10 +1817,10 @@ class IndexExtractor : public ExprFunctor<std::string(const PrimExpr& n)> {
   }
 
   std::string VisitExpr_(const AddNode* op) final {
-    std::cout << "add node " << std::endl;
+    //std::cout << "add node " << std::endl;
     auto left = VisitExpr(op->a);
     auto right = VisitExpr(op->b);
-    std::cout << "left " << left << " right " << right << std::endl;
+    //std::cout << "left " << left << " right " << right << std::endl;
     if (left != "") touch_index.push_back(left);
     if (right != "") touch_index.push_back(right);
     if (right != "" && right.find("r") != std::string::npos)  stencil_index.push_back(right);
@@ -1828,10 +1828,10 @@ class IndexExtractor : public ExprFunctor<std::string(const PrimExpr& n)> {
   }
 
   std::string VisitExpr_(const MulNode* op) final {
-    std::cout << "mul node "  << std::endl;
+    //std::cout << "mul node "  << std::endl;
     auto left = VisitExpr(op->a);
     auto right = VisitExpr(op->b);
-    std::cout << "left " << left << " right " << right << std::endl;
+    //std::cout << "left " << left << " right " << right << std::endl;
     if (left != "") touch_index.push_back(left);
     if (right != "") touch_index.push_back(right);
     return "";
@@ -1984,9 +1984,9 @@ double ComputeOI_Shared_conv2d(
   int tb_ff = valueFinder.findValue("ff", "tb");
   int reg_nn = valueFinder.findValue("nn", "reg");
 
-  std::cout << "valueFinder sm_rc " << sm_rc << std::endl;
-  std::cout << "valueFinder sm_rx " << sm_rx << std::endl;
-  std::cout << "valueFinder sm_ry " << sm_ry << std::endl;
+  //std::cout << "valueFinder sm_rc " << sm_rc << std::endl;
+  //std::cout << "valueFinder sm_rx " << sm_rx << std::endl;
+  //std::cout << "valueFinder sm_ry " << sm_ry << std::endl;
 
   double kernel_shared_trans_per_block = 0.0;
   double input_shared_trans_per_block = 0.0;
@@ -1994,21 +1994,21 @@ double ComputeOI_Shared_conv2d(
   double OI_Shared = 0.0;
 
   // check the access_striding_info
-  std::cout << "[conv2d]check the access_striding_info" << std::endl;
-  std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+  //std::cout << "[conv2d]check the access_striding_info" << std::endl;
+  //std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
   for (auto tdx_acc_info : access_striding_info){
-    std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-    std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+    //std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+    //std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
     for (auto itr : tdx_acc_info.local_threadx_val_map){
-      std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+      //std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
     }
   }
 
   for (TDx_access_info itr : access_striding_info) {
-    std::cout << "[outer loop]" << itr.buffer_name << std::endl;
+    //std::cout << "[outer loop]" << itr.buffer_name << std::endl;
 
     if (itr.local_threadx_val_map.size() == 0) {
-      std::cout << "WARNING! no local threadx in the buffer, boardcasting" << std::endl;
+      //std::cout << "WARNING! no local threadx in the buffer, boardcasting" << std::endl;
       if (itr.buffer_name.find("kernel") != std::string::npos) {
         kernel_shared_trans_per_block = sm_rc * sm_rx * sm_ry * reg_ff * num_warp;
       }
@@ -2020,15 +2020,15 @@ double ComputeOI_Shared_conv2d(
       }
     } else {
       if (itr.buffer_name.find("temp") != std::string::npos) {
-        std::cout << "temp buffer adj" << std::endl;
+        //std::cout << "temp buffer adj" << std::endl;
         int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
         int total_load_elements = itr.buffer_touch_size / outer_time_serial_factor;
-        // std::cout<<  "temp buffer div " << step_len << std::endl;
+        // //std::cout<<  "temp buffer div " << step_len << std::endl;
 
         int input_fvi_size = stride * (reg_xx * tb_xx) + (sm_rx - 1);
         int output_fvi_size = (reg_xx * tb_xx);
-        // std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
-        // std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
+        // //std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
+        // //std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
         std::unordered_map<int, int> bank;
         for (int i = 0; i < 32; i++) bank[i] = 0;
 
@@ -2045,35 +2045,35 @@ double ComputeOI_Shared_conv2d(
 
         // if (max_bc > 1) {
         //   for (auto& i : bank) {
-        //     std::cout<<  i.first << " " << i.second << std::endl;
+        //     //std::cout<<  i.first << " " << i.second << std::endl;
         //   }
-        //   std::cout<<  "INPUT Has buffer bank conflict in the warp " << max_bc << std::endl;
+        //   //std::cout<<  "INPUT Has buffer bank conflict in the warp " << max_bc << std::endl;
         // }
 
         // int total_load_elements_hw = ((reg_xx * tb_xx) * stride + sm_rx-1)* ((reg_yy * tb_yy) *
         // stride + sm_ry-1);
         int total_load_elements_hw = ((reg_xx * tb_xx)) * ((reg_yy * tb_yy));
-        // std::cout<<  "INPUT total_load_elements_hw " << total_load_elements_hw << std::endl;
-        // std::cout<<  "INPUT rounds " << (int)std::ceil(total_load_elements_hw / 32.0) <<
+        // //std::cout<<  "INPUT total_load_elements_hw " << total_load_elements_hw << std::endl;
+        // //std::cout<<  "INPUT rounds " << (int)std::ceil(total_load_elements_hw / 32.0) <<
         // std::endl;
         input_shared_trans_per_block = max_bc * (int)std::ceil(total_load_elements_hw / 32.0) *
                                        sm_rc;  // C is not split, so no need to times C
       }// end of input shared
 
       if (itr.buffer_name.find("kernel") != std::string::npos) {
-        std::cout << "kernel buffer adj" << std::endl;
+        //std::cout << "kernel buffer adj" << std::endl;
         int step_len = itr.local_threadx_val_map["div_threadIdx.x"];
         int total_load_elements = sm_rc * sm_rx * sm_ry * reg_ff;
 
         if (total_load_elements % 32 == 0) {
           if (step_len < 32) {
-            // std::cout<<  "Kernel <32  Has buffer bank conflict in the warp "
+            // //std::cout<<  "Kernel <32  Has buffer bank conflict in the warp "
             //  << approxi_bc_additional(step_len, thread_block_size) << std::endl;
 
             kernel_shared_trans_per_block =
                 1.0 * approxi_bc_additional(step_len, thread_block_size) * total_load_elements;
           } else if (step_len > 32) {
-            // std::cout<<  "Kernel >32 Has buffer bank conflict in the warp "
+            // //std::cout<<  "Kernel >32 Has buffer bank conflict in the warp "
             //  << approxi_bc_additional(step_len, thread_block_size) << std::endl;
             kernel_shared_trans_per_block =
                 1.0 * approxi_bc_additional(step_len, thread_block_size) * total_load_elements;
@@ -2089,10 +2089,10 @@ double ComputeOI_Shared_conv2d(
 
   adj_shared_trans_per_tb =
       (kernel_shared_trans_per_block + input_shared_trans_per_block) * outer_time_serial_factor;
-  std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
-  std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
-  std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
-  std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
+  //std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
+  //std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
+  //std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
+  //std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
   // ---Conv2d---
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_nn * tb_xx * tb_yy * tb_ff;
@@ -2117,28 +2117,28 @@ double ComputeOI_Shared_matmul(
   int tb_j = valueFinder.findValue("j", "tb");
   int reg_j = valueFinder.findValue("i", "reg");
 
-  std::cout << "valueFinder sm_k " << sm_k << std::endl;
-  std::cout << "valueFinder tb_i " << tb_i << std::endl;
+  //std::cout << "valueFinder sm_k " << sm_k << std::endl;
+  //std::cout << "valueFinder tb_i " << tb_i << std::endl;
 
   int kernel_shared_trans_per_block = 0;
   int input_shared_trans_per_block = 0;
   int adj_shared_trans_per_tb = 0;
   
   // check the access_striding_info
-  std::cout << "[mm]check the access_striding_info" << std::endl;
-  std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+  //std::cout << "[mm]check the access_striding_info" << std::endl;
+  //std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
   for (auto tdx_acc_info : access_striding_info){
-    std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-    std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+    //std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+    //std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
     for (auto itr : tdx_acc_info.local_threadx_val_map){
-      std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+      //std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
     }
   }
 
   for (TDx_access_info itr : access_striding_info) {
-    std::cout << "[outer loop]" << itr.buffer_name << std::endl;
+    //std::cout << "[outer loop]" << itr.buffer_name << std::endl;
     if (itr.local_threadx_val_map.size() == 0) {
-      std::cout << "WARNING! no local threadx in the buffer, boardcasting" << std::endl;
+      //std::cout << "WARNING! no local threadx in the buffer, boardcasting" << std::endl;
       if (itr.buffer_name.find("A") != std::string::npos) {
         kernel_shared_trans_per_block = sm_k * tb_i * reg_i * num_warp;
         // left
@@ -2151,11 +2151,11 @@ double ComputeOI_Shared_matmul(
       // handle matmul
       if (itr.buffer_name.find("A") != std::string::npos &&
           itr.local_threadx_val_map.find("div_threadIdx.x") != itr.local_threadx_val_map.end()) {
-        std::cout << "============================== A buffer adj" << std::endl;
+        //std::cout << "============================== A buffer adj" << std::endl;
         int output_fvi_size = itr.local_threadx_val_map["div_threadIdx.x"];
         int input_fvi_size = sm_k * reg_i;
-        // std::cout<<  "A buffer div " << output_fvi_size << std::endl;
-        // std::cout<<  "A input_fvi_size " << input_fvi_size << std::endl;
+        // //std::cout<<  "A buffer div " << output_fvi_size << std::endl;
+        // //std::cout<<  "A input_fvi_size " << input_fvi_size << std::endl;
 
         if (input_fvi_size % 32 == 0) {
           std::unordered_map<int, int> bank;
@@ -2171,7 +2171,7 @@ double ComputeOI_Shared_matmul(
 
           for (auto& i : address_list) {
             int bank_id = i % 32;
-            // std::cout<<  i << " " << bank_id << std::endl;
+            // //std::cout<<  i << " " << bank_id << std::endl;
             if (bank_address_map[bank_id].find(i) == bank_address_map[bank_id].end()) {
               bank_address_map[bank_id] = std::set<int>();
               bank_address_map[bank_id].insert(i);
@@ -2179,7 +2179,7 @@ double ComputeOI_Shared_matmul(
             }
           }
           for (auto& i : bank) {
-            // std::cout<<  i.first << " " << i.second << std::endl;
+            // //std::cout<<  i.first << " " << i.second << std::endl;
           }
 
           int max_bc = 1;  // assume hit once
@@ -2188,19 +2188,19 @@ double ComputeOI_Shared_matmul(
           }
 
           if (max_bc > 1) {
-            // std::cout<<  "[A] Has buffer bank conflict in the warp " << max_bc << std::endl;
+            // //std::cout<<  "[A] Has buffer bank conflict in the warp " << max_bc << std::endl;
           }
 
           if ((input_fvi_size / thread_block_size) > 0 &&
               (input_fvi_size / thread_block_size) % max_bc == 0) {
             // nvcc seems remapping
-            // std::cout<<  "remapping" << std::endl;
+            // //std::cout<<  "remapping" << std::endl;
             max_bc = 1;
           }
 
           // int total_load_elements_hw = ((reg_i * tb_i));
-          // std::cout<<  "A total_load_elements_hw " << total_load_elements_hw << std::endl;
-          // std::cout<<  "A rounds " << (int)std::ceil(total_load_elements_hw / (tb_i)) <<
+          // //std::cout<<  "A total_load_elements_hw " << total_load_elements_hw << std::endl;
+          // //std::cout<<  "A rounds " << (int)std::ceil(total_load_elements_hw / (tb_i)) <<
           // std::endl;
           kernel_shared_trans_per_block = max_bc * num_warp * input_fvi_size;
           //}
@@ -2212,7 +2212,7 @@ double ComputeOI_Shared_matmul(
       // handle matmul
       if (itr.buffer_name.find("B") != std::string::npos &&
           itr.local_threadx_val_map.find("div_threadIdx.x") != itr.local_threadx_val_map.end()) {
-        std::cout << "==============================  B buffer adj" << std::endl;
+        //std::cout << "==============================  B buffer adj" << std::endl;
         int step_len = itr.local_threadx_val_map["mod_threadIdx.x"];
         int total_load_elements = itr.buffer_touch_size / outer_time_serial_factor;
 
@@ -2220,10 +2220,10 @@ double ComputeOI_Shared_matmul(
         int output_fvi_size = input_fvi_size;
         int access_stride = input_fvi_size / step_len;
 
-        // std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
-        // std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
-        // std::cout<<  "B buffer mod " << step_len << std::endl;
-        // std::cout<<  "access_stride" << access_stride << std::endl;
+        // //std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
+        // //std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
+        // //std::cout<<  "B buffer mod " << step_len << std::endl;
+        // //std::cout<<  "access_stride" << access_stride << std::endl;
         std::unordered_map<int, int> bank;
         std::vector<int> address_list;
         std::unordered_map<int, std::set<int>> bank_address_map;
@@ -2236,10 +2236,10 @@ double ComputeOI_Shared_matmul(
           address_list.push_back(address);
         }
 
-        // std::cout<<  "pint address table";
+        // //std::cout<<  "pint address table";
         for (auto& i : address_list) {
           int bank_id = i % 32;
-          // std::cout<<  i << " " << bank_id << std::endl;
+          // //std::cout<<  i << " " << bank_id << std::endl;
           if (bank_address_map[bank_id].find(i) == bank_address_map[bank_id].end()) {
             bank_address_map[bank_id] = std::set<int>();
             bank_address_map[bank_id].insert(i);
@@ -2247,7 +2247,7 @@ double ComputeOI_Shared_matmul(
           }
         }
         for (auto& i : bank) {
-          // std::cout<<  i.first << " " << i.second << std::endl;
+          // //std::cout<<  i.first << " " << i.second << std::endl;
         }
 
         int max_bc = 1;  // assume hit once
@@ -2256,7 +2256,7 @@ double ComputeOI_Shared_matmul(
         }
 
         // if (max_bc > 1) {
-        //   std::cout<<  "[B] Has buffer bank conflict in the warp " << max_bc << std::endl;
+        //   //std::cout<<  "[B] Has buffer bank conflict in the warp " << max_bc << std::endl;
         // }
 
         input_shared_trans_per_block =
@@ -2267,10 +2267,10 @@ double ComputeOI_Shared_matmul(
 
   adj_shared_trans_per_tb =
       (kernel_shared_trans_per_block + input_shared_trans_per_block) * outer_time_serial_factor;
-  std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
-  std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
-  std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
-  std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
+  //std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
+  //std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
+  //std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
+  //std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
 
   // ---Matmul---
   // (Single thread block computed product(TB)) * (product(reg) of output)
@@ -2288,7 +2288,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   std::map<std::string, TrueReductionData> true_reduction_data_map;
   std::map<std::string, StencilReductionData> stencil_reduction_data_map;
 
-  //std::cout<< "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
+  ////std::cout<< "---extract_features---\n---wave_efficiency, est_occupancy, ILP, WLP, Concurrent_estimate, totalReuse, OI_Global---" << std::endl;
   float ILP, WLP, Concurrent_estimate, OI_Global, WLP_REG, WLP_SM, OI_Shared;
   // initialize them here
   ILP = 0.0;
@@ -2304,74 +2304,74 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   float shared_trans = (*features)[2];
   int num_TB = (*features)[3];
   float ori_shared_trans_per_tb = shared_trans / num_TB;
-  //std::cout<< "num_tb " << num_TB << std::endl;
+  ////std::cout<< "num_tb " << num_TB << std::endl;
   features->clear();
 
-  std::cout<< task->compute_dag << std::endl;
+  //std::cout<< task->compute_dag << std::endl;
   IndexExtractor index_extract;
   std::string output_FVI;
   std::vector<std::string> par_order_array;
   for (const auto& op : task->compute_dag->ops) {
-    std::cout<< "size of ops " << task->compute_dag->ops.size() << std::endl;
-    std::cout<< "current op " << op << std::endl;
+    //std::cout<< "size of ops " << task->compute_dag->ops.size() << std::endl;
+    //std::cout<< "current op " << op << std::endl;
      if (auto cop = op.as<te::ComputeOpNode>()) {
-      std::cout<< "----------------------------------------" << std::endl;
-      std::cout<< "cop->name " << cop->name << std::endl;
+      //std::cout<< "----------------------------------------" << std::endl;
+      //std::cout<< "cop->name " << cop->name << std::endl;
       if (cop->name.find("temp") == std::string::npos && cop->name.find("PaddedInput") == std::string::npos) {
-        std::cout<< "cop->name not include temp, ComputeOpNode " << cop->name << std::endl;
+        //std::cout<< "cop->name not include temp, ComputeOpNode " << cop->name << std::endl;
         output_FVI = cop->axis[cop->axis.size()-1]->var->name_hint;
 
         for (int i = cop->axis.size()-1; i > -1; i--){
           par_order_array.push_back(cop->axis[i]->var->name_hint);
-          std::cout<< "output index order   " << cop->axis[i]->var->name_hint << std::endl;
+          //std::cout<< "output index order   " << cop->axis[i]->var->name_hint << std::endl;
         }
 
-        std::cout<< cop->name << " ----" <<cop->body << std::endl;
-        std::cout<< "name: " << cop->name << std::endl;
-        std::cout<< "tag: " << cop->tag << std::endl;
-        std::cout<< "attrs: " << cop->attrs << std::endl;
-        std::cout<< "axis: " << cop->axis << std::endl;
-        std::cout<< "reduce_axis: " << cop->reduce_axis << std::endl;
-        std::cout<< "body: " << cop->body << std::endl;
-        std::cout<< "----------------------------------------" << std::endl;
+        //std::cout<< cop->name << " ----" <<cop->body << std::endl;
+        //std::cout<< "name: " << cop->name << std::endl;
+        //std::cout<< "tag: " << cop->tag << std::endl;
+        //std::cout<< "attrs: " << cop->attrs << std::endl;
+        //std::cout<< "axis: " << cop->axis << std::endl;
+        //std::cout<< "reduce_axis: " << cop->reduce_axis << std::endl;
+        //std::cout<< "body: " << cop->body << std::endl;
+        //std::cout<< "----------------------------------------" << std::endl;
 
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
         for (auto p : ttt) {
-          std::cout<< "p buffer " << p.first->name << std::endl;
+          //std::cout<< "p buffer " << p.first->name << std::endl;
           int reg_buffer_size = 1;
           for (auto vv : p.second) {  // buffer access
-            std::cout<< Array<PrimExpr>(vv) << std::endl;
+            //std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               index_extract.Extract(indx);
-              std::cout<< "indx : " << indx << std::endl;
+              //std::cout<< "indx : " << indx << std::endl;
             }
           }
         }
       }
     }
     // else if (auto op_placeholder = op.as<te::PlaceholderOpNode>()) {
-    //   std::cout << "op_placeholder: " << std::endl;
-    //   std::cout << "name: " << op_placeholder->name << std::endl;
-    //   std::cout << "tag: " << op_placeholder->tag << std::endl;
-    //   std::cout << "attrs: " << op_placeholder->attrs << std::endl;
-    //   std::cout << "shape: " << op_placeholder->shape << std::endl;
-    //   std::cout << "dtype: " << op_placeholder->dtype << std::endl;
-    //   std::cout<< "----------------------------------------" << std::endl;
+    //   //std::cout << "op_placeholder: " << std::endl;
+    //   //std::cout << "name: " << op_placeholder->name << std::endl;
+    //   //std::cout << "tag: " << op_placeholder->tag << std::endl;
+    //   //std::cout << "attrs: " << op_placeholder->attrs << std::endl;
+    //   //std::cout << "shape: " << op_placeholder->shape << std::endl;
+    //   //std::cout << "dtype: " << op_placeholder->dtype << std::endl;
+    //   //std::cout<< "----------------------------------------" << std::endl;
     // }
   }
 
   //remove stencil from reduction
   std::vector<std::string> true_reduction_index = findDiff(index_extract.reduction_index, index_extract.stencil_index);
 
-  std::cout<< "Output FVI : " << output_FVI << std::endl;
+  //std::cout<< "Output FVI : " << output_FVI << std::endl;
   for (auto indx : index_extract.parallel_index){
-    std::cout<< "paralle indx : " << indx << std::endl;
+    //std::cout<< "paralle indx : " << indx << std::endl;
   }
   for (auto indx : index_extract.stencil_index){
-    std::cout<< "stencil indx : " << indx << std::endl;
+    //std::cout<< "stencil indx : " << indx << std::endl;
   }
   for (auto indx : true_reduction_index){
-    std::cout<< "reduction indx : " << indx << std::endl;
+    //std::cout<< "reduction indx : " << indx << std::endl;
   }
 
   float totalReuse = 0.0;
@@ -2439,7 +2439,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (auto spm : v_splitMeta_info) {
     int step_id = spm->step_id;
-    // //std::cout<< "v_splitMeta_info step_id " << step_id  << std::endl;
+    // ////std::cout<< "v_splitMeta_info step_id " << step_id  << std::endl;
     auto ps = (state)->transform_steps[step_id].as<SplitStepNode>();
     int orgin_stage_id = ps->stage_id;
     auto ori_iters = (init_state)->stages[orgin_stage_id]->iters;
@@ -2490,10 +2490,10 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
   for (auto spm : v_splitMeta_info) {
-    std::cout<< *spm << std::endl;
+    //std::cout<< *spm << std::endl;
   }
 
-  std::cout<< "-----------itr id adjust Done------------------------  " << std::endl;
+  //std::cout<< "-----------itr id adjust Done------------------------  " << std::endl;
 
   std::map<std::string, int> sm_name_val_map;
   std::map<std::string, int> reg_novth_name_val_map;
@@ -2507,18 +2507,18 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   int num_thread_per_block = 1;
   int ouput_reg = 1;
   int sm_prod_reduction = 1;
-  // //std::cout<< "end-----------------------------------" << std::endl;
-  //std::cout<< "end-----------------------------------" << std::endl;
+  // ////std::cout<< "end-----------------------------------" << std::endl;
+  ////std::cout<< "end-----------------------------------" << std::endl;
 
   for (auto spm : v_splitMeta_info) {
     if (spm->parallel == 1) {
-      std::cout << "parallel dimension: " << spm->origin_itr->name << std::endl;
-      std::cout<< " name=" << spm->origin_itr->name 
-                << "; Grid tile=" << spm->tile_sizes[0]
-                << "; TB tile=" << spm->tile_sizes[2] << std::endl;
-      std::cout<< "; thread coarse=" << spm->tile_sizes[1] 
-                << "; Reg=" << spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
-      std::cout<< "; SM need=" << spm->tile_sizes[2] * spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
+      //std::cout << "parallel dimension: " << spm->origin_itr->name << std::endl;
+      //std::cout<< " name=" << spm->origin_itr->name 
+                // << "; Grid tile=" << spm->tile_sizes[0]
+                // << "; TB tile=" << spm->tile_sizes[2] << std::endl;
+      //std::cout<< "; thread coarse=" << spm->tile_sizes[1] 
+                // << "; Reg=" << spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
+      //std::cout<< "; SM need=" << spm->tile_sizes[2] * spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4] << std::endl;
 
       int reg = spm->tile_sizes[1] * spm->tile_sizes[3] * spm->tile_sizes[4];
       int pz = spm->problem_size;
@@ -2542,13 +2542,13 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       // TB tile: inner_outer
       // thread coarse: inner_inner
       // SM need: inner_inner * inner_outer
-      std::cout << "reduction dimension: " << spm->origin_itr->name << std::endl;
-      std::cout<< " name=" << spm->origin_itr->name 
-                << "; Grid tile=" << spm->tile_sizes[0]
-                << "; TB tile=" << spm->tile_sizes[1] << std::endl;
-      std::cout<< "; thread coarse=" << spm->tile_sizes[2] 
-                << "; Reg=" << 1 << std::endl;
-      std::cout<< "; SM need=" << spm->tile_sizes[1] * spm->tile_sizes[2] << std::endl;
+      //std::cout << "reduction dimension: " << spm->origin_itr->name << std::endl;
+      //std::cout<< " name=" << spm->origin_itr->name 
+                // << "; Grid tile=" << spm->tile_sizes[0]
+                // << "; TB tile=" << spm->tile_sizes[1] << std::endl;
+      //std::cout<< "; thread coarse=" << spm->tile_sizes[2] 
+                // << "; Reg=" << 1 << std::endl;
+      //std::cout<< "; SM need=" << spm->tile_sizes[1] * spm->tile_sizes[2] << std::endl;
 
       int sm_reduction = spm->tile_sizes[1] * spm->tile_sizes[2];
       int pz = spm->problem_size;
@@ -2568,7 +2568,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     if (spm == v_splitMeta_info.end()[-1]) {
       continue;
     }
-    std::cout<< "end-----------------------------------" << std::endl;
+    //std::cout<< "end-----------------------------------" << std::endl;
   }
 
   // use true_reduction_data_map and stencil_reduction_data_map
@@ -2585,19 +2585,19 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   // if (parallel_data_map.size()){
   //   for( auto each: parallel_data_map){
-  //     std::cout<< "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "parallel_data_map : " << each.first << " reg " << each.second.reg << " tb " << each.second.tb << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
   // if (true_reduction_data_map.size()){
   //   for( auto each: true_reduction_data_map){
-  //     std::cout<< "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "true_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
   // if (stencil_reduction_data_map.size()){
   //   for( auto each: stencil_reduction_data_map){
-  //     std::cout<< "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
+  //     //std::cout<< "stencil_reduction_data_map : " << each.first << " sm " << each.second.sm << " pz " << each.second.pz << std::endl;
   //   }
   // }
 
@@ -2615,7 +2615,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       auto ca = (state)->transform_steps[i + 1].as<ComputeAtStepNode>();
       int append_itr_position = ca->target_iter_id;
       int ca_target_stage_id = ca->target_stage_id + chr_offest;
-      // //std::cout<< target_stage_id << "--" << ca_target_stage_id << " " << append_itr_position
+      // ////std::cout<< target_stage_id << "--" << ca_target_stage_id << " " << append_itr_position
       //           << std::endl;
       cache_stage_adj_id.push_back({target_stage_id, ca_target_stage_id, append_itr_position});
       chr_offest++;
@@ -2630,13 +2630,13 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         }
       }
       auto_unroll_max_step = atoi(psn->pragma_type.c_str() + pos + 1);
-      //std::cout<< "unrll factor " << auto_unroll_max_step  << std::endl;
+      ////std::cout<< "unrll factor " << auto_unroll_max_step  << std::endl;
 
     }
 
 
   }
-  //std::cout<< "-------------CHR CA done----------------------" << std::endl;
+  ////std::cout<< "-------------CHR CA done----------------------" << std::endl;
 
   std::unordered_set<std::string> index_set;
   // TODO: what if we have more than one compute  ??
@@ -2644,7 +2644,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (const auto& op : task->compute_dag->ops) {
     if (auto cop = op.as<te::ComputeOpNode>()) {
-      // //std::cout<< "------SM alloca ----------" << cop  << std::endl;
+      // ////std::cout<< "------SM alloca ----------" << cop  << std::endl;
       if (cop->name.find("temp") == std::string::npos) {
         // output
         Array<PrimExpr> output_index;
@@ -2681,11 +2681,11 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   //// check buffer index information
    for (auto itr : buf_index_map){
-     //std::cout<< itr.first << std::endl;
+     ////std::cout<< itr.first << std::endl;
      for (auto el : itr.second){
-        //std::cout<< el << " ";
+        ////std::cout<< el << " ";
      }
-     //std::cout<< std::endl;
+     ////std::cout<< std::endl;
    }
 
    //(Approximation) op access index info from base computation
@@ -2694,35 +2694,35 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
 
   for (const auto& op : task->compute_dag->ops) {
     if (auto cop = op.as<te::ComputeOpNode>()) {
-      //std::cout<< "------SM alloca ----------" << cop  << std::endl;
+      ////std::cout<< "------SM alloca ----------" << cop  << std::endl;
       if (cop->name.find("temp") == std::string::npos) {
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
         for (auto p : ttt) {
-          //std::cout<< "p buffer " << p.first->name << std::endl;
+          ////std::cout<< "p buffer " << p.first->name << std::endl;
           int sm_buffer_size = 1;
           // int reuse_factor = 1;
           for (auto vv : p.second) {  // buffer access
-            //std::cout<< Array<PrimExpr>(vv) << std::endl;
+            ////std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               auto index_extent = extractor.Extract(indx);
-              //std::cout<< "indx : " << indx << " " << index_extent << std::endl;
+              ////std::cout<< "indx : " << indx << " " << index_extent << std::endl;
               sm_buffer_size *= index_extent;
             }
           }
-          //std::cout<< "buffer size " << sm_buffer_size << std::endl << std::endl;
+          ////std::cout<< "buffer size " << sm_buffer_size << std::endl << std::endl;
           totalShared += sm_buffer_size;
         }
       }
     }
   }
-  //std::cout<< "---------------SM alloction done--------------------" << " total shared: " << totalShared << std::endl;
+  ////std::cout<< "---------------SM alloction done--------------------" << " total shared: " << totalShared << std::endl;
 
   int totalReg = 1;
   BuffExtractor extractor_reg(reg_name_val_map);
 
   // ad hoc for output
   for (auto itr : reg_name_val_map){
-    ////std::cout<< "R  " <<  itr.first << "----" << itr.second<< std::endl;
+    //////std::cout<< "R  " <<  itr.first << "----" << itr.second<< std::endl;
     totalReg *= itr.second;
   }
 
@@ -2730,29 +2730,29 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     if (auto cop = op.as<te::ComputeOpNode>()) {
       if (cop->name.find("temp") != std::string::npos) continue;
       if (cop->name.find("local") == std::string::npos) { // Yufan:: why to use "local" as keyword??
-        //std::cout<< cop->name << "----" <<cop->body << std::endl;
+        ////std::cout<< cop->name << "----" <<cop->body << std::endl;
 
         auto ttt = task->compute_dag->access_analyzer->read_from.at(op);
 
         for (auto p : ttt) {
-          //std::cout<< "p buffer " << p.first->name << std::endl;
+          ////std::cout<< "p buffer " << p.first->name << std::endl;
           int reg_buffer_size = 1;
           for (auto vv : p.second) {  // buffer access
-            //std::cout<< Array<PrimExpr>(vv) << std::endl;
+            ////std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               auto index_extent = extractor_reg.Extract(indx);
-              //std::cout<< "indx : " << indx << " " << index_extent << std::endl;
+              ////std::cout<< "indx : " << indx << " " << index_extent << std::endl;
               reg_buffer_size *= index_extent;
             }
           }
-          //std::cout<< "reg buffer size "  << reg_buffer_size << std::endl << std::endl;
+          ////std::cout<< "reg buffer size "  << reg_buffer_size << std::endl << std::endl;
           totalReg += reg_buffer_size;
         }
       }
     }
   }
 
-  //std::cout<< "------reg alloca DONE ---------- " << " total reg: " << totalReg << std::endl;
+  ////std::cout<< "------reg alloca DONE ---------- " << " total reg: " << totalReg << std::endl;
 
   std::vector<std::pair<std::string, int>> loops_inandout;
   auto temp_map = reg_novth_name_val_map;
@@ -2765,16 +2765,16 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       for (size_t i = stg->iters.size()-1; i > 0; i--) {
         const Iterator& iter = stg->iters[i];
         if (static_cast<int>(iter->annotation) == 0) {
-          //std::cout<< iter->name << " (" << iter->range->min << "," << iter->range->extent << ")" << std::endl;
+          ////std::cout<< iter->name << " (" << iter->range->min << "," << iter->range->extent << ")" << std::endl;
           auto itvn = strip_itr_name(iter->name);
           int extent = GetIntImm(iter->range->extent);
           //kncoking out reg loop
 
-          //std::cout<< itvn << "  "<<temp_map[itvn] << "?" << extent<< std::endl;
+          ////std::cout<< itvn << "  "<<temp_map[itvn] << "?" << extent<< std::endl;
 
 
           if (temp_map[itvn] / extent >= 1){
-              //std::cout<< "knocking" << std::endl;
+              ////std::cout<< "knocking" << std::endl;
               temp_map[itvn] = temp_map[itvn]/ extent;
           }
           else{
@@ -2786,14 +2786,14 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   }
 
 
-  //std::cout<< "\n--------------compute reg buffer reuse ---------------------" << std::endl;
+  ////std::cout<< "\n--------------compute reg buffer reuse ---------------------" << std::endl;
   int reg_alloc = 1;
   for (auto itr : reg_name_val_map){
     reg_alloc *= itr.second;
   }
 
   // if (reg_alloc > 256){
-  //   //std::cout<< "WARNING! pure REG " << reg_alloc << std::endl;
+  //   ////std::cout<< "WARNING! pure REG " << reg_alloc << std::endl;
   // }
 
   std::map<std::string, int> buf_reuse_map;
@@ -2807,7 +2807,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         for (auto i = 0; i < cop->axis.size(); i++) {
           output_index.push_back(PrimExpr(cop->axis[i].get()->var));
         }
-        //std::cout<< output_index << std::endl;
+        ////std::cout<< output_index << std::endl;
 
         for (auto indx : output_index) {
           reuse_extractor.Extract(indx);
@@ -2816,7 +2816,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         for (auto itr : reuse_extractor.name_val_map){
             reuse_factor *= itr.second;
         }
-        //std::cout<< "reg " << cop->name << ", reuse_factor, " << reuse_factor << std::endl;
+        ////std::cout<< "reg " << cop->name << ", reuse_factor, " << reuse_factor << std::endl;
         buf_reuse_map[cop->name] = reuse_factor;
 
         auto ttt = task->compute_dag.operator->()->access_analyzer->read_from.at(op);
@@ -2824,7 +2824,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           ReuseExtractor reuse_extractor(reg_name_val_map);
           int reuse_factor = 1;
           for (auto vv : p.second) {  // buffer access
-            //std::cout<< Array<PrimExpr>(vv) << std::endl;
+            ////std::cout<< Array<PrimExpr>(vv) << std::endl;
             for (auto indx : vv) {
               reuse_extractor.Extract(indx);
             }
@@ -2832,7 +2832,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
           for (auto itr : reuse_extractor.name_val_map){
             reuse_factor *= itr.second;
           }
-          //std::cout<< "reg " << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
+          ////std::cout<< "reg " << p.first->name << ", reuse_factor, " << reuse_factor << std::endl;
           buf_reuse_map[p.first->name] = reuse_factor;
         }
       }
@@ -2846,9 +2846,9 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
       int loop_extent = std::get<1>(*loop);
       std::unordered_set<std::string> index_set = itr.second;
       if (index_set.find(loop_itr_name) == index_set.end()){
-        //std::cout<< "loop itr " << loop_itr_name << std::endl;
+        ////std::cout<< "loop itr " << loop_itr_name << std::endl;
         reuse_factor *= loop_extent;
-        //std::cout<< "reuse " << std::endl;
+        ////std::cout<< "reuse " << std::endl;
       }
       else if (loop_extent == 1){
         continue;
@@ -2857,7 +2857,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
         break;
       }
     }
-    //std::cout<< itr.first << ", reuse_factor, " << reuse_factor << std::endl;
+    ////std::cout<< itr.first << ", reuse_factor, " << reuse_factor << std::endl;
     totalReuse += 1.0/float(reuse_factor);
   }
 
@@ -2885,7 +2885,7 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
     auto pos = op_key.find("[", 1);
     auto pos2 = op_key.find(",", pos);
     stride = std::stoi(op_key.substr(pos + 1, pos2 - pos - 1));
-    std::cout << "stride " << stride << std::endl;
+    //std::cout << "stride " << stride << std::endl;
     OI_Shared = ComputeOI_Shared_conv2d(parallel_data_map, true_reduction_data_map, stencil_reduction_data_map, access_striding_info, num_warp, thread_block_size, outer_time_serial_factor, stride);
   }
 
@@ -2899,41 +2899,41 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
 
-  std::cout<< "\n---Check OI_Shared---" << std::endl;
-  std::cout<< "original shared_trans_per_tb : " << ori_shared_trans_per_tb << std::endl;
-  std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
-  std::cout<< "OI_Shared : " << OI_Shared << std::endl;
-  std::cout<< "thread_block_size " << thread_block_size << std::endl;
-  std::cout<< "num_TB : " << num_TB << std::endl;
-  std::cout<< "---Check BC End---\n" << std::endl;
+  //std::cout<< "\n---Check OI_Shared---" << std::endl;
+  //std::cout<< "original shared_trans_per_tb : " << ori_shared_trans_per_tb << std::endl;
+  //std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
+  //std::cout<< "OI_Shared : " << OI_Shared << std::endl;
+  //std::cout<< "thread_block_size " << thread_block_size << std::endl;
+  //std::cout<< "num_TB : " << num_TB << std::endl;
+  //std::cout<< "---Check BC End---\n" << std::endl;
 
-  std::cout<< "---Feature---" << std::endl;
-  std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
-  std::cout<< "est_occupancy " << est_occupancy << std::endl;
-  std::cout<< "ILP " << ILP << std::endl;
-  std::cout<< "WLP " << WLP << std::endl;
-  std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
-  std::cout<< "totalReuse " << totalReuse << std::endl;
-  std::cout<< "OI_Global " << OI_Global << std::endl;
-  std::cout<< "OI_Shared " << OI_Shared << std::endl;
-  std::cout<< "---Feature End---\n" << std::endl;
+  //std::cout<< "---Feature---" << std::endl;
+  //std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
+  //std::cout<< "est_occupancy " << est_occupancy << std::endl;
+  //std::cout<< "ILP " << ILP << std::endl;
+  //std::cout<< "WLP " << WLP << std::endl;
+  //std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
+  //std::cout<< "totalReuse " << totalReuse << std::endl;
+  //std::cout<< "OI_Global " << OI_Global << std::endl;
+  //std::cout<< "OI_Shared " << OI_Shared << std::endl;
+  //std::cout<< "---Feature End---\n" << std::endl;
 
   if (thread_block_size < 32 || thread_block_size > 1024){
-    std::cout<< "WARNING! thread_block_size " << thread_block_size << std::endl;
+    //std::cout<< "WARNING! thread_block_size " << thread_block_size << std::endl;
     return std::make_tuple(-1, -1, -1, -1);
   }
 
   if (totalReg > 256){
-    std::cout<< "WARNING! pure REG " << totalReg << std::endl;
+    //std::cout<< "WARNING! pure REG " << totalReg << std::endl;
     return std::make_tuple(-1, -1, -1, -1);
   }
 
   if (totalShared > maxDynamicSharedMemorySize){
-    std::cout<< "WARNING! totalShared " << totalShared << std::endl;
+    //std::cout<< "WARNING! totalShared " << totalShared << std::endl;
     return std::make_tuple(-1, -1, -1, -1);
   }
 
-  std::cout << " ret_state \n" << ret_state << std::endl;
+  //std::cout << " ret_state \n" << ret_state << std::endl;
   
   return std::make_tuple(totalShared, totalReg, totalReuse, wave_efficiency);
 }
@@ -2943,7 +2943,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
                         std::vector<size_t>* res,
                         tvm::Map<String, tvm::PrimExpr> gpu_params,
                         std::vector<TDx_access_info>* access_striding_info, bool log_scale) {
-  std::cout<< "[GetPerStoreOurFeature]" << std::endl;  
+  //std::cout<< "[GetPerStoreOurFeature]" << std::endl;  
   PerStoreFeatureExtractor extractor(cache_line_size, func->buffer_map);
   extractor(func->body);
   const FeatureSet& tmp = extractor.buffer_features.begin()->second;
@@ -2954,12 +2954,12 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   int block_dimy = tmp.threadIdx_y_len;
   int block_dimz = tmp.threadIdx_z_len;
 
-  ////std::cout<<  "TBx : " << tmp.blockIdx_x_len << std::endl;
-  ////std::cout<<  "TBx : " << tmp.blockIdx_y_len << std::endl;
-  ////std::cout<<  "TBx : " << tmp.blockIdx_z_len << std::endl;
-  ////std::cout<<  "THx : " << tmp.threadIdx_x_len << std::endl;
-  ////std::cout<<  "THx : " << tmp.threadIdx_y_len << std::endl;
-  ////std::cout<<  "THx : " << tmp.threadIdx_z_len << std::endl;
+  //////std::cout<<  "TBx : " << tmp.blockIdx_x_len << std::endl;
+  //////std::cout<<  "TBx : " << tmp.blockIdx_y_len << std::endl;
+  //////std::cout<<  "TBx : " << tmp.blockIdx_z_len << std::endl;
+  //////std::cout<<  "THx : " << tmp.threadIdx_x_len << std::endl;
+  //////std::cout<<  "THx : " << tmp.threadIdx_y_len << std::endl;
+  //////std::cout<<  "THx : " << tmp.threadIdx_z_len << std::endl;
   int num_TB = grid_dimx * grid_dimy * grid_dimz;
   int num_warp = std::ceil( (float)block_dimx*block_dimy*block_dimz/32);
 
@@ -2972,17 +2972,17 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
 
   //Need to design return
   for (const auto& x : extractor.xbuffer_features){
-    std::cout<<  "---- Summary ---" << std::endl;
-    std::cout<<  "num_warp : " << num_warp << std::endl;
-    std::cout<<  "num_TB : " << num_TB << std::endl;
+    //std::cout<<  "---- Summary ---" << std::endl;
+    //std::cout<<  "num_warp : " << num_warp << std::endl;
+    //std::cout<<  "num_TB : " << num_TB << std::endl;
     const xFeatureSet& fea_set = x.second;
     for (const auto& xacc_fea : fea_set.access_feas) {
-      std::cout<<  "Buffer name : " << xacc_fea.buffer_name << std::endl;
-      std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
-      std::cout<<  "Buffer acc_type : " << int(xacc_fea.acc_type) << std::endl;
-      std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-      std::cout<<  "*** Buffer vect  : " << xacc_fea.vector_len << std::endl;
-      std::cout<<  "block_dimx " << block_dimx << std::endl;
+      //std::cout<<  "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      //std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
+      //std::cout<<  "Buffer acc_type : " << int(xacc_fea.acc_type) << std::endl;
+      //std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      //std::cout<<  "*** Buffer vect  : " << xacc_fea.vector_len << std::endl;
+      //std::cout<<  "block_dimx " << block_dimx << std::endl;
       int warp_trans = std::ceil( (float)xacc_fea.touch_size/block_dimx) *num_warp;
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
         if (xacc_fea.buffer_name.find("pad_temp") != std::string::npos){
@@ -2991,7 +2991,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
             shared_trans_kernel += warp_trans;
         }
       }
-      // //std::cout<<  "Buffer warp trans : " << warp_trans << std::endl;
+      // ////std::cout<<  "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       // if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
       //   if (xacc_fea.buffer_name.find("pad_temp") != std::string::npos){
@@ -3000,13 +3000,13 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       //       shared_trans_kernel += warp_trans;
       //   }
       //   BCExtractor bc_extractor;
-      //   // //std::cout<<  "Buffer name : " << xacc_fea.buffer_name << std::endl;
-      //   // //std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
-      //   // //std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-      //   // //std::cout<<  "Buffer indices : " << std::endl;
+      //   // ////std::cout<<  "Buffer name : " << xacc_fea.buffer_name << std::endl;
+      //   // ////std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
+      //   // ////std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      //   // ////std::cout<<  "Buffer indices : " << std::endl;
       //   for (const auto& x : xacc_fea.indices) {
       //     for (const auto& y : x) {
-      //       // //std::cout<<  y << std::endl;
+      //       // ////std::cout<<  y << std::endl;
       //       bc_extractor.Extract(y);
       //     }
       //   }
@@ -3015,7 +3015,7 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       // std::map<std::string, int> threadx_val_map = bc_extractor.GetThreadxValMap();
       // std::map<std::string, int> tmp_threadx_val_map;
       // for (const auto& x : threadx_val_map) {
-      //   //std::cout<<  "threadx_val_map : " << x.first << " " << x.second << std::endl;
+      //   ////std::cout<<  "threadx_val_map : " << x.first << " " << x.second << std::endl;
       //   tmp_threadx_val_map[x.first] = x.second;
       // }
 
@@ -3044,9 +3044,9 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
       }
     }
   }
-  //std::cout<<  "global_trans : " << global_trans << std::endl;
-  //std::cout<<  "shared_trans : " << shared_trans << std::endl;
-  //std::cout<<  "local_trans : " << local_trans << std::endl;
+  ////std::cout<<  "global_trans : " << global_trans << std::endl;
+  ////std::cout<<  "shared_trans : " << shared_trans << std::endl;
+  ////std::cout<<  "local_trans : " << local_trans << std::endl;
 
 
 
@@ -3060,9 +3060,9 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   int thread_per_TB = (*res)[2];
   thread_per_TB = std::ceil( (float)thread_per_TB/32) * 32;
 
-  ////std::cout<<  "totalShared (#): " << totalShared << std::endl;
-  ////std::cout<<  "thread_per_TB (#) : " << thread_per_TB << std::endl;
-  ////std::cout<<  "registersUsed_per_thread (#): " << registersUsed_per_thread << std::endl;
+  //////std::cout<<  "totalShared (#): " << totalShared << std::endl;
+  //////std::cout<<  "thread_per_TB (#) : " << thread_per_TB << std::endl;
+  //////std::cout<<  "registersUsed_per_thread (#): " << registersUsed_per_thread << std::endl;
 
   assert (totalShared != 0);
   assert (thread_per_TB != 0);
@@ -3080,22 +3080,22 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
 
   float occupancy = warpsPerSM / (maxWarpsSM * 1.0);
 
-  ////std::cout<<  "global_trans : " << global_trans << std::endl;
-  ////std::cout<<  "shared_trans : " << shared_trans << std::endl;
-  ////std::cout<<  "local_trans : " << local_trans << std::endl;
+  //////std::cout<<  "global_trans : " << global_trans << std::endl;
+  //////std::cout<<  "shared_trans : " << shared_trans << std::endl;
+  //////std::cout<<  "local_trans : " << local_trans << std::endl;
 
-  ////std::cout<<  "max_threads_per_block : " << gpu_params["max_threads_per_block"].as<IntImmNode>()->value << std::endl;
-  ////std::cout<<  "max_shared_memory_per_block : " << gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value << std::endl;
+  //////std::cout<<  "max_threads_per_block : " << gpu_params["max_threads_per_block"].as<IntImmNode>()->value << std::endl;
+  //////std::cout<<  "max_shared_memory_per_block : " << gpu_params["max_shared_memory_per_block"].as<IntImmNode>()->value << std::endl;
 
-  ////std::cout<<  "thread_per_TB : " << thread_per_TB << std::endl;
-  ////std::cout<<  "totalShared : " << totalShared << std::endl;
-  ////std::cout<<  "registersUsed_per_thread : " << registersUsed_per_thread << std::endl;
+  //////std::cout<<  "thread_per_TB : " << thread_per_TB << std::endl;
+  //////std::cout<<  "totalShared : " << totalShared << std::endl;
+  //////std::cout<<  "registersUsed_per_thread : " << registersUsed_per_thread << std::endl;
 
-  ////std::cout<<  "blocksPerSMWarps : " << blocksPerSMWarps << std::endl;
-  ////std::cout<<  "blocksPerSMSharedMemory : " << blocksPerSMSharedMemory << std::endl;
-  ////std::cout<<  "blocksPerSMReg : " << blocksPerSMReg << std::endl;
+  //////std::cout<<  "blocksPerSMWarps : " << blocksPerSMWarps << std::endl;
+  //////std::cout<<  "blocksPerSMSharedMemory : " << blocksPerSMSharedMemory << std::endl;
+  //////std::cout<<  "blocksPerSMReg : " << blocksPerSMReg << std::endl;
 
-  ////std::cout<<  "T occupancy : " << occupancy << std::endl;
+  //////std::cout<<  "T occupancy : " << occupancy << std::endl;
   ret->push_back(1);
   ret->push_back(global_trans);
   ret->push_back(shared_trans);
@@ -3107,26 +3107,26 @@ void GetPerStoreOurFeature(const PrimFunc& func, int cache_line_size, int max_n_
   // (*ret)[1] = global_trans;
   // (*ret)[2] = shared_trans;
   // (*ret)[3] = occupancy;
-  ////std::cout<<  "ret0 : " << (*ret)[0] << std::endl;
-  ////std::cout<<  "ret1 : " << (*ret)[1] << std::endl;
-  ////std::cout<<  "ret2 : " << (*ret)[2] << std::endl;
-  ////std::cout<<  "ret3 : " << (*ret)[3] << std::endl;
-  std::cout << "global_trans: " << (*ret)[1] << std::endl;
-  std::cout << "shared_trans: " << (*ret)[2] << std::endl;
-  std::cout << "occupancy: " << (*ret)[3] << std::endl;
-  std::cout << "num_TB: " << (*ret)[4] << std::endl;
-  std::cout << "shared_trans_input: " << (*ret)[5] << std::endl;
-  std::cout << "shared_trans_kernel: " << (*ret)[6] << std::endl;
+  //////std::cout<<  "ret0 : " << (*ret)[0] << std::endl;
+  //////std::cout<<  "ret1 : " << (*ret)[1] << std::endl;
+  //////std::cout<<  "ret2 : " << (*ret)[2] << std::endl;
+  //////std::cout<<  "ret3 : " << (*ret)[3] << std::endl;
+  //std::cout << "global_trans: " << (*ret)[1] << std::endl;
+  //std::cout << "shared_trans: " << (*ret)[2] << std::endl;
+  //std::cout << "occupancy: " << (*ret)[3] << std::endl;
+  //std::cout << "num_TB: " << (*ret)[4] << std::endl;
+  //std::cout << "shared_trans_input: " << (*ret)[5] << std::endl;
+  //std::cout << "shared_trans_kernel: " << (*ret)[6] << std::endl;
 
-  std::cout<< "[GetPerStoreOurFeature done]" << std::endl;  
-  std::cout<<  "[GetPerStoreOurFeature] OuR ret vect size : " << ret->size() << std::endl;
+  //std::cout<< "[GetPerStoreOurFeature done]" << std::endl;  
+  //std::cout<<  "[GetPerStoreOurFeature] OuR ret vect size : " << ret->size() << std::endl;
 }
 
 void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int max_n_bufs,
                               std::vector<float>* ret, std::vector<size_t>* res,
                               tvm::Map<String, tvm::PrimExpr> gpu_params,
                               std::vector<TDx_access_info>* access_striding_info) {
-  std::cout<< "[GetPerStoreOurFeature_bc]" << std::endl;  
+  //std::cout<< "[GetPerStoreOurFeature_bc]" << std::endl;  
   PerStoreFeatureExtractor extractor(cache_line_size, op_func->buffer_map);
   extractor(op_func->body);
   const FeatureSet& tmp = extractor.buffer_features.begin()->second;
@@ -3137,12 +3137,12 @@ void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int 
   int block_dimy = tmp.threadIdx_y_len;
   int block_dimz = tmp.threadIdx_z_len;
 
-  // //std::cout<<  "TBx : " << tmp.blockIdx_x_len << std::endl;
-  // //std::cout<<  "TBx : " << tmp.blockIdx_y_len << std::endl;
-  // //std::cout<<  "TBx : " << tmp.blockIdx_z_len << std::endl;
-  // //std::cout<<  "THx : " << tmp.threadIdx_x_len << std::endl;
-  // //std::cout<<  "THx : " << tmp.threadIdx_y_len << std::endl;
-  // //std::cout<<  "THx : " << tmp.threadIdx_z_len << std::endl;
+  // ////std::cout<<  "TBx : " << tmp.blockIdx_x_len << std::endl;
+  // ////std::cout<<  "TBx : " << tmp.blockIdx_y_len << std::endl;
+  // ////std::cout<<  "TBx : " << tmp.blockIdx_z_len << std::endl;
+  // ////std::cout<<  "THx : " << tmp.threadIdx_x_len << std::endl;
+  // ////std::cout<<  "THx : " << tmp.threadIdx_y_len << std::endl;
+  // ////std::cout<<  "THx : " << tmp.threadIdx_z_len << std::endl;
   int num_TB = grid_dimx * grid_dimy * grid_dimz;
   int num_warp = std::ceil((float)block_dimx * block_dimy * block_dimz / 32);
 
@@ -3151,30 +3151,30 @@ void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int 
 
   // Need to design return
   for (const auto& x : extractor.xbuffer_features) {
-    std::cout<<  "---- Summary ---" << std::endl;
-    std::cout<<  "num_warp : " << num_warp << std::endl;
-    std::cout<<  "num_TB : " << num_TB << std::endl;
+    //std::cout<<  "---- Summary ---" << std::endl;
+    //std::cout<<  "num_warp : " << num_warp << std::endl;
+    //std::cout<<  "num_TB : " << num_TB << std::endl;
     const xFeatureSet& fea_set = x.second;
     for (const auto& xacc_fea : fea_set.access_feas) {
-      std::cout<<  "!!!!!! Buffer name : " << xacc_fea.buffer_name << std::endl;
-      std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
-      std::cout<<  "Buffer acc_type : " << int(xacc_fea.acc_type) << std::endl;
-      std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-      std::cout<<  "*** Buffer vect  : " << xacc_fea.vector_len << std::endl;
-      std::cout<<  "block_dimx " << block_dimx << std::endl;
+      //std::cout<<  "!!!!!! Buffer name : " << xacc_fea.buffer_name << std::endl;
+      //std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
+      //std::cout<<  "Buffer acc_type : " << int(xacc_fea.acc_type) << std::endl;
+      //std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+      //std::cout<<  "*** Buffer vect  : " << xacc_fea.vector_len << std::endl;
+      //std::cout<<  "block_dimx " << block_dimx << std::endl;
 
       int warp_trans = std::ceil((float)xacc_fea.touch_size / block_dimx) * num_warp;
-      std::cout<<  "Buffer warp trans : " << warp_trans << std::endl;
+      //std::cout<<  "Buffer warp trans : " << warp_trans << std::endl;
       // Accumulate here
       if (xacc_fea.scope == "shared" && xacc_fea.acc_type == BufferAccessType::kRead) {
         BCExtractor bc_extractor;
-        std::cout<<  "!!!  Buffer name : " << xacc_fea.buffer_name << std::endl;
-        std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
-        std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
-        std::cout<<  "Buffer indices : " << xacc_fea.indices.size() << std::endl;
+        //std::cout<<  "!!!  Buffer name : " << xacc_fea.buffer_name << std::endl;
+        //std::cout<<  "Buffer scope : " << xacc_fea.scope << std::endl;
+        //std::cout<<  "Buffer touch_size : " << xacc_fea.touch_size << std::endl;
+        //std::cout<<  "Buffer indices : " << xacc_fea.indices.size() << std::endl;
         for (const auto& x : xacc_fea.indices) {
           for (const auto& y : x) {
-            //std::cout<<  y << std::endl;
+            ////std::cout<<  y << std::endl;
             bc_extractor.Extract(y);
           }
         }
@@ -3182,7 +3182,7 @@ void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int 
         std::map<std::string, int> threadx_val_map = bc_extractor.GetThreadxValMap();
         std::map<std::string, int> tmp_threadx_val_map;
         for (const auto& x : threadx_val_map) {
-          std::cout<<  "threadx_val_map : " << x.first << " " << x.second << std::endl;
+          //std::cout<<  "threadx_val_map : " << x.first << " " << x.second << std::endl;
           tmp_threadx_val_map[x.first] = x.second;
         }
 
@@ -3194,13 +3194,12 @@ void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int 
 
         access_striding_info->push_back(tdx_acc_info);
 
-        std::cout<<  "only accumulate shared mem read to shared_trans name : " <<
-        xacc_fea.buffer_name << ", buffer size : " << xacc_fea.touch_size << std::endl; 
+        //std::cout<<  "only accumulate shared mem read to shared_trans name : " << xacc_fea.buffer_name << ", buffer size : " << xacc_fea.touch_size << std::endl; 
         // only consider shared memory read for bank conflict
       }
     }
   }
-  std::cout<< "[GetPerStoreOurFeature_bc end]" << std::endl;
+  //std::cout<< "[GetPerStoreOurFeature_bc end]" << std::endl;
 }
 
 void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, int max_n_bufs,
@@ -3231,8 +3230,8 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     res.reserve(5);
     PrimFunc op_prim_func;
 
-    std::cout << "[GetPerStoreFeaturesWorkerFunc] " << std::endl << std::endl;
-    std::cout << " state : " << state << std::endl; 
+    //std::cout << "[GetPerStoreFeaturesWorkerFunc] " << std::endl << std::endl;
+    //std::cout << " state : " << state << std::endl; 
 
     if (IsGPUTask(task)) {
       auto pass_list = Array<tvm::transform::Pass>();
@@ -3258,9 +3257,9 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
       pass_list.push_back(tir::transform::xVerifyGPUCode(gpu_params, &res));
       const auto& optimize = tir::transform::Sequential(pass_list);
       auto temp_mode = optimize(mod);
-      // std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ] temp_mode  " << temp_mode << std::endl;
+      // //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ] temp_mode  " << temp_mode << std::endl;
       op_prim_func = Downcast<PrimFunc>(temp_mode->Lookup(name));
-      std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]op_prim_func  " << op_prim_func << std::endl;
+      //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]op_prim_func  " << op_prim_func << std::endl;
     }
     const auto& optimize =
         tir::transform::Sequential(Array<tvm::transform::Pass>{tir::transform::Simplify()});
@@ -3268,7 +3267,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     PrimFunc prim_func = Downcast<PrimFunc>(mod->Lookup(name));
     //default 164 feature here
     // GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
-    std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]prim_func  " << prim_func << std::endl;
+    //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]prim_func  " << prim_func << std::endl;
     tvm::Map<String, tvm::PrimExpr> gpu_params{
           {"max_sm", task->hardware_params->num_cores},
           {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
@@ -3278,9 +3277,9 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
           {"max_vthread", task->hardware_params->max_vthread_extent},
     };
 
-    // std::cout << "gpu_params : " << std::endl;
+    // //std::cout << "gpu_params : " << std::endl;
     // for (auto it : gpu_params){
-    //   std::cout  << it.first << "   " << it.second << std::endl;
+    //   //std::cout  << it.first << "   " << it.second << std::endl;
     // }
 
      /**
@@ -3292,7 +3291,7 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
      */
     // std::vector<float> our_feature;
     // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
-    // std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
+    // //std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
     int a, b, c, d;
     std::vector<float> features_extracted;
     int feature_size = 8;
@@ -3305,17 +3304,17 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
                               &res, gpu_params, &access_striding_info);
 
       // // check the access_striding_info
-      // std::cout << "check the access_striding_info" << std::endl;
-      // std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+      // //std::cout << "check the access_striding_info" << std::endl;
+      // //std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
       // for (auto tdx_acc_info : access_striding_info){
-      //   std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-      //   std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+      //   //std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+      //   //std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
       //   for (auto itr : tdx_acc_info.local_threadx_val_map){
-      //     std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+      //     //std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
       //   }
       // }
 
-      // std::cout << "feature size : " << feature->size() << std::endl;
+      // //std::cout << "feature size : " << feature->size() << std::endl;
       float global_trans = (*feature)[1];
       float shared_trans = (*feature)[2];
       float est_occupancy = (*feature)[3];
@@ -3323,14 +3322,14 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
       long long shared_trans_input = (*feature)[5];
       long long shared_trans_kernel = (*feature)[6];
 
-      std::cout << "global_trans: "   << global_trans   << std::endl;
-      std::cout << "shared_trans: "   << shared_trans   << std::endl;
-      std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
-      std::cout<<  "num_TB: "  << num_TB   << std::endl;
-      std::cout<<  "shared_trans_input: "  << shared_trans_input   << std::endl;
-      std::cout<<  "shared_trans_kernel: "  << shared_trans_kernel   << std::endl;
+      //std::cout << "global_trans: "   << global_trans   << std::endl;
+      //std::cout << "shared_trans: "   << shared_trans   << std::endl;
+      //std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
+      //std::cout<<  "num_TB: "  << num_TB   << std::endl;
+      //std::cout<<  "shared_trans_input: "  << shared_trans_input   << std::endl;
+      //std::cout<<  "shared_trans_kernel: "  << shared_trans_kernel   << std::endl;
 
-      // std::cout << "state " << state << std::endl;
+      // //std::cout << "state " << state << std::endl;
 
       features_extracted.reserve(feature_size);
       features_extracted.push_back(global_trans);
@@ -3363,10 +3362,10 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
     feature->clear();
     feature->push_back(1);
     for (auto fea: features_extracted){
-      std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
+      //std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
       feature->push_back(fea);
     }
-    std::cout << "feature size : " << feature->size() << std::endl;
+    //std::cout << "feature size : " << feature->size() << std::endl;
 
   } catch (Error& e) {
     (*error_ct)++;
@@ -3558,7 +3557,7 @@ String GetScopeFromBufferName(String bfname){
     res = "global";
   }
 
-  //std::cout << tmp << " -- " << res;
+  ////std::cout << tmp << " -- " << res;
   return res;
 }
 
