@@ -2117,21 +2117,25 @@ double ComputeOI_Shared_matmul(
   int tb_j = valueFinder.findValue("j", "tb");
   int reg_j = valueFinder.findValue("i", "reg");
 
-  //std::cout << "valueFinder sm_k " << sm_k << std::endl;
-  //std::cout << "valueFinder tb_i " << tb_i << std::endl;
+  // std::cout << "valueFinder sm_k " << sm_k << std::endl;
+  // std::cout << "valueFinder tb_i " << tb_i << std::endl;
+  // std::cout << "valueFinder reg_i " << reg_i << std::endl;
+  // std::cout << "valueFinder tb_j " << tb_j << std::endl;
+  // std::cout << "valueFinder reg_j " << reg_j << std::endl;
+  
 
   int kernel_shared_trans_per_block = 0;
   int input_shared_trans_per_block = 0;
   int adj_shared_trans_per_tb = 0;
   
   // check the access_striding_info
-  //std::cout << "[mm]check the access_striding_info" << std::endl;
-  //std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
+  // std::cout << "[mm]check the access_striding_info" << std::endl;
+  // std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
   for (auto tdx_acc_info : access_striding_info){
-    //std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-    //std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
+    // std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
+    // std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
     for (auto itr : tdx_acc_info.local_threadx_val_map){
-      //std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
+      // std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
     }
   }
 
@@ -2151,11 +2155,11 @@ double ComputeOI_Shared_matmul(
       // handle matmul
       if (itr.buffer_name.find("A") != std::string::npos &&
           itr.local_threadx_val_map.find("div_threadIdx.x") != itr.local_threadx_val_map.end()) {
-        //std::cout << "============================== A buffer adj" << std::endl;
+        // std::cout << "============================== A buffer adj" << std::endl;
         int output_fvi_size = itr.local_threadx_val_map["div_threadIdx.x"];
         int input_fvi_size = sm_k * reg_i;
-        // //std::cout<<  "A buffer div " << output_fvi_size << std::endl;
-        // //std::cout<<  "A input_fvi_size " << input_fvi_size << std::endl;
+        // std::cout<<  "A buffer div " << output_fvi_size << std::endl;
+        // std::cout<<  "A input_fvi_size " << input_fvi_size << std::endl;
 
         if (input_fvi_size % 32 == 0) {
           std::unordered_map<int, int> bank;
@@ -2220,10 +2224,10 @@ double ComputeOI_Shared_matmul(
         int output_fvi_size = input_fvi_size;
         int access_stride = input_fvi_size / step_len;
 
-        // //std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
-        // //std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
-        // //std::cout<<  "B buffer mod " << step_len << std::endl;
-        // //std::cout<<  "access_stride" << access_stride << std::endl;
+        // std::cout<<  "input_fvi_size " << input_fvi_size << std::endl;
+        // std::cout<<  "output_fvi_size " << output_fvi_size << std::endl;
+        // std::cout<<  "B buffer mod " << step_len << std::endl;
+        // std::cout<<  "access_stride" << access_stride << std::endl;
         std::unordered_map<int, int> bank;
         std::vector<int> address_list;
         std::unordered_map<int, std::set<int>> bank_address_map;
@@ -2236,19 +2240,19 @@ double ComputeOI_Shared_matmul(
           address_list.push_back(address);
         }
 
-        // //std::cout<<  "pint address table";
+        // std::cout<<  "pint address table";
         for (auto& i : address_list) {
           int bank_id = i % 32;
-          // //std::cout<<  i << " " << bank_id << std::endl;
+          std::cout<<  i << " " << bank_id << std::endl;
           if (bank_address_map[bank_id].find(i) == bank_address_map[bank_id].end()) {
             bank_address_map[bank_id] = std::set<int>();
             bank_address_map[bank_id].insert(i);
             bank[bank_id] += 1;
           }
         }
-        for (auto& i : bank) {
-          // //std::cout<<  i.first << " " << i.second << std::endl;
-        }
+        // for (auto& i : bank) {
+        //   std::cout<<  i.first << " " << i.second << std::endl;
+        // }
 
         int max_bc = 1;  // assume hit once
         for (auto& i : bank) {
@@ -2267,17 +2271,20 @@ double ComputeOI_Shared_matmul(
 
   adj_shared_trans_per_tb =
       (kernel_shared_trans_per_block + input_shared_trans_per_block) * outer_time_serial_factor;
-  //std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
-  //std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
-  //std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
-  //std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
+  // std::cout << "kernel_shared_trans_per_block " << kernel_shared_trans_per_block << std::endl;
+  // std::cout << "input_shared_trans_per_block " << input_shared_trans_per_block << std::endl;
+  // std::cout << "outer_time_serial_factor " << outer_time_serial_factor << std::endl;
+  // std::cout << "adj_shared_trans_per_tb " << adj_shared_trans_per_tb << std::endl;
 
   // ---Matmul---
   // (Single thread block computed product(TB)) * (product(reg) of output)
   // thread_block_size = tb_i * tb_j * tb_k;
   // ouput_reg: reg i * j
   int ouput_reg = reg_i * reg_j;
-  float OI_Shared = thread_block_size * ouput_reg * sm_k * 1.0 / adj_shared_trans_per_tb / 32.0;
+  float OI_Shared = 0;
+  if (adj_shared_trans_per_tb != 0){
+    OI_Shared = thread_block_size * ouput_reg * sm_k * 1.0 / adj_shared_trans_per_tb / 32.0;
+  }
 
   return OI_Shared;
 }
@@ -2899,29 +2906,28 @@ std::tuple<int, int, float, float> extract_features(const SearchTask& task, cons
   features->push_back(OI_Global);
   features->push_back(OI_Shared);
 
-  //std::cout<< "\n---Check OI_Shared---" << std::endl;
-  //std::cout<< "original shared_trans_per_tb : " << ori_shared_trans_per_tb << std::endl;
-  //std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
-  //std::cout<< "OI_Shared : " << OI_Shared << std::endl;
-  //std::cout<< "thread_block_size " << thread_block_size << std::endl;
-  //std::cout<< "num_TB : " << num_TB << std::endl;
-  //std::cout<< "---Check BC End---\n" << std::endl;
+  // std::cout<< "\n---Check OI_Shared---" << std::endl;
+  // std::cout<< "original shared_trans_per_tb : " << ori_shared_trans_per_tb << std::endl;
+  // std::cout<< "outer_time_serial_factor : " << outer_time_serial_factor << std::endl;
+  // std::cout<< "OI_Shared : " << OI_Shared << std::endl;
+  // std::cout<< "thread_block_size " << thread_block_size << std::endl;
+  // std::cout<< "num_TB : " << num_TB << std::endl;
+  // std::cout<< "---Check BC End---\n" << std::endl;
 
-  //std::cout<< "---Feature---" << std::endl;
-  //std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
-  //std::cout<< "est_occupancy " << est_occupancy << std::endl;
-  //std::cout<< "ILP " << ILP << std::endl;
-  //std::cout<< "WLP " << WLP << std::endl;
-  //std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
-  //std::cout<< "totalReuse " << totalReuse << std::endl;
-  //std::cout<< "OI_Global " << OI_Global << std::endl;
-  //std::cout<< "OI_Shared " << OI_Shared << std::endl;
-  //std::cout<< "---Feature End---\n" << std::endl;
+  // std::cout<< "---Feature---" << std::endl;
+  // std::cout<< "wave_efficiency " << wave_efficiency << std::endl;
+  // std::cout<< "est_occupancy " << est_occupancy << std::endl;
+  // std::cout<< "ILP " << ILP << std::endl;
+  // std::cout<< "WLP " << WLP << std::endl;
+  // std::cout<< "Concurrent_estimate " << Concurrent_estimate << std::endl;
+  // std::cout<< "totalReuse " << totalReuse << std::endl;
+  // std::cout<< "OI_Global " << OI_Global << std::endl;
+  // std::cout<< "OI_Shared " << OI_Shared << std::endl;
+  // std::cout<< "---Feature End---\n" << std::endl;
 
-  if (thread_block_size < 32 || thread_block_size > 1024){
-    //std::cout<< "WARNING! thread_block_size " << thread_block_size << std::endl;
-    return std::make_tuple(-1, -1, -1, -1);
-  }
+  // if (thread_block_size < 32 || thread_block_size > 1024){
+  //   return std::make_tuple(-1, -1, -1, -1);
+  // }
 
   if (totalReg > 256){
     //std::cout<< "WARNING! pure REG " << totalReg << std::endl;
