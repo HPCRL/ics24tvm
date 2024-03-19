@@ -235,8 +235,8 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   int model_age = 0;
   count_sampled = 0;
   int num_start = n_trials;
-  int max_time = 30;
-  int max_measurement = 3000;
+  int max_time = 40;
+  int max_measurement = 1000;
   int start_idx = 0;
   auto start_time = std::chrono::high_resolution_clock::now();  // init start time
   std::chrono::minutes max_duration(static_cast<int>(max_time)); // convert max_time to minutes
@@ -1278,7 +1278,7 @@ Array<State> SketchPolicyNode::gen_neigbour_list(
   return neighbors;
 }
 
-void SketchPolicyNode::DGD_Move(
+int SketchPolicyNode::DGD_Move(
     const State base_state, const std::vector<float>& neighbour_scores,
     const std::vector<int>& indices, const Array<State> loal_path_neighbors,
     std::unordered_set<std::string>& visited, int& max_idx, std::vector<Array<State>*> next_states,
@@ -1363,6 +1363,9 @@ void SketchPolicyNode::DGD_Move(
         gflops_map_[state_str] =
             search_task->compute_dag->flop_ct / FloatArrayMean(results[i]->costs) / 1e9;
         measured_states_throughputs_.push_back(gflops_map_[state_str]);
+        if (measured_states_throughputs_.size() > 1000 + sample_init_min_pop_) {
+          return -1;
+        }
 
         // get its index in good_from_predict, and push gflops into neighbor_gflops
         neighbor_gflops[not_measured_states_map[state_str]] = gflops_map_[state_str];
@@ -1423,6 +1426,7 @@ void SketchPolicyNode::DGD_Move(
     }
   }
   // PrintTimeElapsed(timmer, "DGD_Move", verbose);
+  return 0;
 }
 
 /* decide move
@@ -1486,9 +1490,12 @@ void SketchPolicyNode::DGD_Search(Array<State> start_states,
     std::vector<int> indices_2hop = Argsort(neighbour_scores_2hop);
 
     // call DGD_Move to move
-    DGD_Move(base_state, neighbour_scores_2hop, indices_2hop, loal_path_neighbors_2hop, visited,
+    count_sampled = DGD_Move(base_state, neighbour_scores_2hop, indices_2hop, loal_path_neighbors_2hop, visited,
             max_idx, next_states, index, found_better, measurer, window_size, tolerant_score,
             global_best_gflops, model_age, total_inputs, total_results);
+    if (count_sampled == -1) {
+      return;
+    }
 
     // explore 3hops
     if (max_idx == -1) {
@@ -1642,14 +1649,14 @@ void SketchPolicyNode::SearchOneRoundDGD(int batch_size, int n_start, ProgramMea
   for (int i = 0; i < batch_size; i++) {
     auto next = next_states[i];
     if (next->empty()) {
-      if (count_sampled + 1 > n_start + batch_size - 1) {
-        // std ::cout << "count_sampled = " << count_sampled << std::endl;
-        // std ::cout << "n_start = " << n_start << std::endl;
-        // std ::cout << "batch_size = " << batch_size << std::endl;
-        // std::cout << "count_sampled + 1 > n_start + batch_size - 1" << std::endl;
-        count_sampled = -1;
-        return;
-      }
+      // if (count_sampled + 1 > n_start + batch_size - 1) {
+      //   // std ::cout << "count_sampled = " << count_sampled << std::endl;
+      //   // std ::cout << "n_start = " << n_start << std::endl;
+      //   // std ::cout << "batch_size = " << batch_size << std::endl;
+      //   // std::cout << "count_sampled + 1 > n_start + batch_size - 1" << std::endl;
+      //   count_sampled = -1;
+      //   return;
+      // }
       // if no valid in start_states, re-sample
       if ((*start_idx) > start_states.size() - 1) {
         Array<State> tmp_start_states = SampleCUDAInitPopulation(sketch_cache_, 1);

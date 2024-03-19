@@ -185,7 +185,7 @@ class SketchPolicyNode : public SearchPolicyNode {
   void SearchOneRoundDGD(int num_random_states, int n_trials, ProgramMeasurer measurer, std::vector<Array<State>*>  next_states, Array<State> start_states, int* start_idx, bool firsttime_random = false,  int* model_age = nullptr);
 
   Array<Array<State>> GenerateNeighbours(Array<State> states, std::unordered_map<std::string, std::vector<int>> pz_factors, Array<State>& sketches, std::vector<splitMeta*> v_splitMeta_info);
-  void DGD_Move(const State base_state, const std::vector<float>& neighbour_scores,
+  int DGD_Move(const State base_state, const std::vector<float>& neighbour_scores,
                 const std::vector<int>& indices, const Array<State> loal_path_neighbors,
                 std::unordered_set<std::string>& visited, int& max_idx,
                 std::vector<Array<State>*> next_states, int index, bool& found_better,
