@@ -1364,6 +1364,7 @@ int SketchPolicyNode::DGD_Move(
             search_task->compute_dag->flop_ct / FloatArrayMean(results[i]->costs) / 1e9;
         measured_states_throughputs_.push_back(gflops_map_[state_str]);
         if (measured_states_throughputs_.size() > 1000 + sample_init_min_pop_) {
+          std::cout << "stop here" << std::endl;
           return -1;
         }
 
@@ -1521,9 +1522,12 @@ void SketchPolicyNode::DGD_Search(Array<State> start_states,
       std::vector<int> indices_3hop = Argsort(neighbour_scores_3hop);
 
       // call DGD_Move to move
-      DGD_Move(base_state, neighbour_scores_3hop, indices_3hop, loal_path_neighbors_3hop, visited,
+      count_sampled = DGD_Move(base_state, neighbour_scores_3hop, indices_3hop, loal_path_neighbors_3hop, visited,
                max_idx, next_states, index, found_better, measurer, window_size, tolerant_score,
                global_best_gflops, model_age, total_inputs, total_results);
+      if (count_sampled == -1) {
+        return;
+      }
     }  // end 3hop
 
     // if no btter neighbor found, clear next_states[index] to resample
