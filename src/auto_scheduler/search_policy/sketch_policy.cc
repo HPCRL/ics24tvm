@@ -236,8 +236,9 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
   count_sampled = 0;
   int num_start = n_trials;
   int max_time = 40;
-  int max_measurement = 1000;
+  max_measurement_ = 1000;
   int start_idx = 0;
+  init_model_size_ = sample_init_min_pop_;
   auto start_time = std::chrono::high_resolution_clock::now();  // init start time
   std::chrono::minutes max_duration(static_cast<int>(max_time)); // convert max_time to minutes
   std::chrono::minutes duration; // declare duration variable
@@ -324,7 +325,7 @@ State SketchPolicyNode::Search(int n_trials, int early_stopping, int num_measure
     std::cout << "Num of sampled: #" << count_sampled << std::endl;
 
     duration = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::high_resolution_clock::now() - start_time);
-  } while (count_sampled != -1 && duration <= max_duration && measured_states_throughputs_.size() < max_measurement);
+  } while (count_sampled != -1 && duration <= max_duration && measured_states_throughputs_.size() < max_measurement_);
 
   PrintTitle("Done", verbose);
 
@@ -1363,7 +1364,7 @@ int SketchPolicyNode::DGD_Move(
         gflops_map_[state_str] =
             search_task->compute_dag->flop_ct / FloatArrayMean(results[i]->costs) / 1e9;
         measured_states_throughputs_.push_back(gflops_map_[state_str]);
-        if (measured_states_throughputs_.size() > 1000 + sample_init_min_pop_) {
+        if (measured_states_throughputs_.size() > max_measurement_ + init_model_size_) {
           std::cout << "stop here" << std::endl;
           return -1;
         }

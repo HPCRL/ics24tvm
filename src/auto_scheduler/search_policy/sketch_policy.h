@@ -230,6 +230,8 @@ class SketchPolicyNode : public SearchPolicyNode {
   std::unordered_set<std::string> cache_failed;
   /*! \brief The minimul output population of SampleInitPopulation */
   int sample_init_min_pop_;
+  int init_model_size_;
+  int max_measurement_;
   float global_tolerant_threashold;
 
   friend class SketchPolicy;
