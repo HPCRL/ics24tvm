@@ -785,8 +785,8 @@ class PerStoreFeatureExtractor : public StmtExprVisitor {
     // Group 1: Computation related features
     ExtractComputationFeature(node->buffer->data, node->indices, math_op_counter);
 
-    // Our new feature: memory transactions
-    ExtractTransaction(node->buffer->data, node->indices, node->value, math_op_counter, &buffer_touch_map);
+    // // Our new feature: memory transactions
+    // ExtractTransaction(node->buffer->data, node->indices, node->value, math_op_counter, &buffer_touch_map);
 
     // Group 2: Buffer access related features (per buffer)
     ExtractBufferAccessFeature(node->buffer->data, node->indices, node->value, math_op_counter,
@@ -3202,6 +3202,7 @@ void GetPerStoreOurFeature_bc(const PrimFunc& op_func, int cache_line_size, int 
   //std::cout<< "[GetPerStoreOurFeature_bc end]" << std::endl;
 }
 
+
 void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, int max_n_bufs,
                                    std::vector<float>* feature, std::atomic<int>* error_ct) {
   te::Schedule sch;
@@ -3226,12 +3227,6 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
         pass_ctx->GetConfig<Bool>("tir.disable_vectorize", Bool(false)).value();
     bool instrument_bound_checkers =
         pass_ctx->GetConfig<Bool>("tir.instrument_bound_checkers", Bool(false)).value();
-    std::vector<size_t> res; //to keep actual resource usage
-    res.reserve(5);
-    PrimFunc op_prim_func;
-
-    //std::cout << "[GetPerStoreFeaturesWorkerFunc] " << std::endl << std::endl;
-    //std::cout << " state : " << state << std::endl; 
 
     if (IsGPUTask(task)) {
       auto pass_list = Array<tvm::transform::Pass>();
@@ -3246,127 +3241,21 @@ void GetPerStoreFeaturesWorkerFunc(const SearchTask& task, const State& state, i
       pass_list.push_back(tir::transform::StorageRewrite());
       pass_list.push_back(tir::transform::Simplify());
       tvm::Map<String, tvm::PrimExpr> gpu_params{
-          {"max_sm", task->hardware_params->num_cores},
           {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
           {"max_local_memory_per_block", task->hardware_params->max_local_memory_per_block},
           {"max_threads_per_block", task->hardware_params->max_threads_per_block},
           {"max_vector_bytes", task->hardware_params->vector_unit_bytes},
           {"max_vthread", task->hardware_params->max_vthread_extent},
       };
-    //   pass_list.push_back(tir::transform::VerifyGPUCode(gpu_params));
-      pass_list.push_back(tir::transform::xVerifyGPUCode(gpu_params, &res));
+      pass_list.push_back(tir::transform::VerifyGPUCode(gpu_params));
       const auto& optimize = tir::transform::Sequential(pass_list);
-      auto temp_mode = optimize(mod);
-      // //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ] temp_mode  " << temp_mode << std::endl;
-      op_prim_func = Downcast<PrimFunc>(temp_mode->Lookup(name));
-      //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]op_prim_func  " << op_prim_func << std::endl;
+      optimize(mod);
     }
     const auto& optimize =
         tir::transform::Sequential(Array<tvm::transform::Pass>{tir::transform::Simplify()});
     mod = optimize(std::move(mod));
     PrimFunc prim_func = Downcast<PrimFunc>(mod->Lookup(name));
-    //default 164 feature here
-    // GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
-    //std::cout<<  "[ GetPerStoreFeaturesWorkerFunc ]prim_func  " << prim_func << std::endl;
-    tvm::Map<String, tvm::PrimExpr> gpu_params{
-          {"max_sm", task->hardware_params->num_cores},
-          {"max_shared_memory_per_block", task->hardware_params->max_shared_memory_per_block},
-          {"max_local_memory_per_block", task->hardware_params->max_local_memory_per_block},
-          {"max_threads_per_block", task->hardware_params->max_threads_per_block},
-          {"max_vector_bytes", task->hardware_params->vector_unit_bytes},
-          {"max_vthread", task->hardware_params->max_vthread_extent},
-    };
-
-    // //std::cout << "gpu_params : " << std::endl;
-    // for (auto it : gpu_params){
-    //   //std::cout  << it.first << "   " << it.second << std::endl;
-    // }
-
-     /**
-     * @brief 
-     * //res is from xVerifyGPUCode Line 1569
-     *    res->push_back(local_memory_per_block_);
-     *    res->push_back(shared_memory_per_block_);
-     *    res->push_back(thread_per_block_);
-     */
-    // std::vector<float> our_feature;
-    // GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, &our_feature, &res, gpu_params);
-    // //std::cout << "xVerifyGPUCode res size : " << res.size() << std::endl;
-    int a, b, c, d;
-    std::vector<float> features_extracted;
-    int feature_size = 8;
-    try {
-      std::vector<TDx_access_info> access_striding_info;
-      access_striding_info.reserve(10);
-      GetPerStoreOurFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature,
-                            &res, gpu_params, &access_striding_info);
-      GetPerStoreOurFeature_bc(op_prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature,
-                              &res, gpu_params, &access_striding_info);
-
-      // // check the access_striding_info
-      // //std::cout << "check the access_striding_info" << std::endl;
-      // //std::cout << "access_striding_info size : " << access_striding_info.size() << std::endl;
-      // for (auto tdx_acc_info : access_striding_info){
-      //   //std::cout << "buffer_name : " << tdx_acc_info.buffer_name << std::endl;
-      //   //std::cout << "buffer_touch_size : " << tdx_acc_info.buffer_touch_size << std::endl;
-      //   for (auto itr : tdx_acc_info.local_threadx_val_map){
-      //     //std::cout << "local_threadx_val_map : " << itr.first << " " << itr.second << std::endl;
-      //   }
-      // }
-
-      // //std::cout << "feature size : " << feature->size() << std::endl;
-      float global_trans = (*feature)[1];
-      float shared_trans = (*feature)[2];
-      float est_occupancy = (*feature)[3];
-      int num_TB = (*feature)[4];
-      long long shared_trans_input = (*feature)[5];
-      long long shared_trans_kernel = (*feature)[6];
-
-      //std::cout << "global_trans: "   << global_trans   << std::endl;
-      //std::cout << "shared_trans: "   << shared_trans   << std::endl;
-      //std::cout << "est_occupancy: "  << est_occupancy   << std::endl;
-      //std::cout<<  "num_TB: "  << num_TB   << std::endl;
-      //std::cout<<  "shared_trans_input: "  << shared_trans_input   << std::endl;
-      //std::cout<<  "shared_trans_kernel: "  << shared_trans_kernel   << std::endl;
-
-      // //std::cout << "state " << state << std::endl;
-
-      features_extracted.reserve(feature_size);
-      features_extracted.push_back(global_trans);
-      features_extracted.push_back(est_occupancy);
-      features_extracted.push_back(shared_trans);
-      features_extracted.push_back(num_TB);
-
-      std::vector<splitMeta*> v_splitMeta_info = generateSplitMeta(task, state);
-
-      // valid tuple create for prune
-      int num_sm = task->hardware_params->num_cores;
-      int maxDynamicSharedMemorySize =
-          task->hardware_params->max_shared_memory_per_block / 4;  // bytes
-      std::tie(a, b, c, d) =
-          extract_features(task, state, v_splitMeta_info, &features_extracted, num_sm,
-                           maxDynamicSharedMemorySize, access_striding_info);
-      access_striding_info.clear();
-    } catch (Error& e) {
-      a = -1;
-      (*error_ct)++;
-    }
-    if (a == -1) {
-      features_extracted.clear();
-      for (int i = 0; i < feature_size; i++) {
-        features_extracted.push_back(0);
-      }
-    }
-
-    // clear the feature vector
-    feature->clear();
-    feature->push_back(1);
-    for (auto fea: features_extracted){
-      //std::cout << "[GetPerStoreFeaturesWorkerFunc] fea " << fea << std::endl;
-      feature->push_back(fea);
-    }
-    //std::cout << "feature size : " << feature->size() << std::endl;
-
+    GetPerStoreFeature(prim_func, task->hardware_params->cache_line_bytes, max_n_bufs, feature);
   } catch (Error& e) {
     (*error_ct)++;
   }
