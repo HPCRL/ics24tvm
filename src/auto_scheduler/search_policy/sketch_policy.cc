@@ -485,67 +485,24 @@ ConfigKey SketchPolicyNode::map_to_configkey(
   return config_key;
 }
 
+/**
+ * @brief Retrieves the state factor for a given search task and state.
+ * 
+ * This function calculates the state factor for a given search task and state by generating split metadata and
+ * analyzing the transform steps. It returns an unordered map that maps the origin iterator names to their corresponding
+ * tile configurations.
+ * 
+ * @param task The search task.
+ * @param state The state.
+ * @return std::unordered_map<std::string, std::vector<int>> The state factor, represented as an unordered map where
+ *         the keys are the origin iterator names and the values are the corresponding tile configurations.
+ */
 std::unordered_map<std::string, std::vector<int>> SketchPolicyNode::GetStateFactor(
     const SearchTask& task, const State& state) {
   // validated correct for more level tiling 
   std::vector<splitMeta*> v_splitMeta_info;
   v_splitMeta_info = GenerateSplitMeta(this, state);
-  State ret_state;
-  StateNode* pstate;
 
-  if (state->stages.empty()) {
-    // If the input state is incomplete with empty operation stage
-    // create a new state from init_state and update it first
-    ret_state = task->compute_dag->init_state;
-    pstate = ret_state.CopyOnWrite();
-    pstate->transform_steps = state->transform_steps;
-    for (const auto& step : pstate->transform_steps) {
-      StepApplyToState(step, &ret_state, task->compute_dag);
-    }
-  } else {
-    ret_state = state;
-    pstate = ret_state.CopyOnWrite();
-  }
-
-  Array<te::Stage> stages;
-  StageToAxesMap stage_to_axes;
-  te::Schedule sch;
-  Array<te::Tensor> tensors;
-  // Replay steps to tvm::Schedule
-  std::tie(sch, tensors) =
-      task->compute_dag.ApplySteps(pstate->transform_steps, &stages, &stage_to_axes);
-  sch = sch.normalize_for_feature_extraction();
-  // Get bound information from TVM schedule
-  Map<IterVar, Range> bounds = te::InferBound(sch);
-
-  // Update the state bound information
-  for (size_t i = 0; i < pstate->stages.size(); ++i) {
-    const Stage& stage = pstate->stages[i];
-
-    if (stage->compute_at == ComputeAtKind::kInlined) {
-      continue;
-    }
-
-    Array<Iterator> new_iters;
-    new_iters.reserve(stage->iters.size());
-    // Get bound information from schedule
-    // the StageToAxesMap is used to find the corresponding IterVar in TVM schedule result
-    for (size_t j = 0; j < stage->iters.size(); ++j) {
-      const Iterator& iter = stage->iters[j];
-      const IterVar& axis = stage_to_axes.at(stages[i])[j];
-
-      auto find_res = bounds.find(axis);
-      if (find_res != bounds.end()) {
-        new_iters.push_back(Iterator(iter->name, (*find_res).second, iter->iter_kind,
-                                     iter->annotation, &iter->orig_iters));
-      } else {
-        LOG(FATAL) << "Infer bound fails";
-      }
-    }
-
-    pstate->stages.Set(
-        i, Stage(stage->op, stage->op_type, new_iters, stage->compute_at, stage->attrs));
-  }
   const State& init_state = task->compute_dag->init_state;
   std::map<int, int> stage_itr_offset;
 
